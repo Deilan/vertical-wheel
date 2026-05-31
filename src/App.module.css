@@ -211,6 +211,14 @@
   line-height: 1;
 }
 
+.mediaImage {
+  width: var(--image-size);
+  height: var(--image-size);
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgb(0 0 0 / 8%);
+}
+
 .cardText {
   display: grid;
   gap: 4px;
@@ -386,6 +394,7 @@
 .previewPanel,
 .editorSection,
 .validationBox,
+.statusBox,
 .optionEditor {
   border: 1px solid var(--panel-border);
   border-radius: 8px;
@@ -398,6 +407,7 @@
 
 .editorSection,
 .validationBox,
+.statusBox,
 .optionEditor {
   display: grid;
   gap: 12px;
@@ -431,6 +441,16 @@
 
 .validationBox strong {
   color: inherit;
+}
+
+.statusBox {
+  color: #bbf7d0;
+  background: rgb(20 83 45 / 34%);
+}
+
+.page[data-theme='light'] .statusBox {
+  color: #14532d;
+  background: rgb(220 252 231 / 78%);
 }
 
 .validationBox ul {
@@ -490,9 +510,19 @@
 }
 
 .rangeList,
-.optionEditors {
+.optionEditors,
+.exchangeActions,
+.imageControls {
   display: grid;
   gap: 10px;
+}
+
+.exchangeActions {
+  grid-template-columns: 1fr;
+}
+
+.imageControls {
+  align-items: end;
 }
 
 .rangeField {
@@ -529,6 +559,29 @@
   gap: 8px;
 }
 
+.fileButton {
+  position: relative;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--control-text);
+  background: var(--control-bg);
+  box-sizing: border-box;
+  font-size: 14px;
+  text-align: center;
+}
+
+.fileButton input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 @media (max-width: 380px) {
   .colorGrid,
   .optionInlineFields {
@@ -557,9 +610,15 @@
 
   .editorSection,
   .validationBox,
+  .statusBox,
   .optionEditor,
   .previewPanel {
     padding: 16px;
+  }
+
+  .exchangeActions,
+  .imageControls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .rangeField {

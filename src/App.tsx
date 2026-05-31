@@ -11,6 +11,7 @@ import {
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
 } from './domain/spinPhysics'
+import { createShareHash, readShareConfigFromHash } from './domain/shareConfig'
 import type {
   WheelConfig,
   WheelHistory,
@@ -18,15 +19,19 @@ import type {
   WheelSettings,
 } from './domain/types'
 import { WHEEL_LIMITS, WHEEL_SETTING_LIMITS } from './domain/types'
+import { parseWheelConfigJson } from './domain/validation'
 import { getWinningOption } from './domain/winningOption'
 import {
   loadWheelHistory,
   saveWheelHistory,
 } from './storage/historyStorage'
+import { loadWheelConfig, saveWheelConfig } from './storage/wheelStorage'
+import { compressImageFile, isSupportedImageFile } from './utils/imageCompression'
 import styles from './App.module.css'
 
 type AppMode = 'spin' | 'edit'
 type NumberSettingKey = keyof typeof WHEEL_SETTING_LIMITS
+type AppMessage = { kind: 'success' | 'error'; text: string }
 type GestureState = {
   pointerId: number
   startY: number
@@ -72,6 +77,10 @@ function cloneWheelConfig(config: WheelConfig): WheelConfig {
   }
 }
 
+function getInitialWheelConfig(): WheelConfig {
+  return cloneWheelConfig(demoWheelConfig)
+}
+
 function getRandomJitterCards(): number {
   return (Math.random() * 2 - 1) * defaultSpinPhysicsConfig.randomJitterCards
 }
@@ -86,6 +95,36 @@ function getOptionMedia(option: WheelOption): string {
   }
 
   return option.emoji || '•'
+}
+
+function getShareUrl(config: WheelConfig): { ok: true; value: string } | { ok: false; error: string } {
+  const hash = createShareHash(config)
+
+  if (!hash.ok) {
+    return hash
+  }
+
+  return {
+    ok: true,
+    value: `${window.location.origin}${window.location.pathname}${window.location.search}${hash.value}`,
+  }
+}
+
+function downloadJson(config: WheelConfig) {
+  const blob = new Blob([`${JSON.stringify(config, null, 2)}\n`], {
+    type: 'application/json',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = 'vertical-wheel-config.json'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return file.text()
 }
 
 function getCardStepPx(settings: WheelSettings): number {
@@ -156,6 +195,8 @@ function WheelCard({
   settings: WheelSettings
   isActive: boolean
 }) {
+  const image = option.image
+
   return (
     <div
       className={styles.card}
@@ -173,9 +214,13 @@ function WheelCard({
         } as CSSProperties
       }
     >
-      <span className={styles.media} aria-hidden="true">
-        {getOptionMedia(option)}
-      </span>
+      {image ? (
+        <img className={styles.mediaImage} src={image.value} alt="" />
+      ) : (
+        <span className={styles.media} aria-hidden="true">
+          {getOptionMedia(option)}
+        </span>
+      )}
       <span className={styles.cardText}>
         <strong>{option.title.trim() || 'Без названия'}</strong>
         {option.subtitle ? <small>{option.subtitle}</small> : null}
@@ -285,12 +330,14 @@ function WheelView({
 function SpinScreen({
   config,
   history,
+  statusMessage,
   validationMessages,
   onHistoryChange,
   onEdit,
 }: {
   config: WheelConfig
   history: WheelHistory
+  statusMessage?: AppMessage
   validationMessages: string[]
   onHistoryChange: (history: WheelHistory) => void
   onEdit: () => void
@@ -452,6 +499,12 @@ function SpinScreen({
         </div>
       )}
 
+      {statusMessage ? (
+        <div className={statusMessage.kind === 'error' ? styles.validationBox : styles.statusBox} role="status">
+          {statusMessage.text}
+        </div>
+      ) : null}
+
       <WheelView
         config={config}
         isInteractive={isValid}
@@ -535,12 +588,22 @@ function EditScreen({
   config,
   validationMessages,
   onConfigChange,
+  onExportJson,
+  onImportJson,
+  onShareLink,
+  onStatus,
   onSpin,
+  statusMessage,
 }: {
   config: WheelConfig
   validationMessages: string[]
   onConfigChange: (config: WheelConfig) => void
+  onExportJson: () => void
+  onImportJson: (file: File) => void
+  onShareLink: () => void
+  onStatus: (message: AppMessage) => void
   onSpin: () => void
+  statusMessage?: AppMessage
 }) {
   const { wheel } = config
 
@@ -569,6 +632,29 @@ function EditScreen({
         option.id === optionId ? { ...option, ...patch } : option,
       ),
     })
+  }
+
+  async function uploadOptionImage(optionId: string, file: File) {
+    if (!isSupportedImageFile(file)) {
+      onStatus({ kind: 'error', text: 'Поддерживаются только PNG, JPG, JPEG и WebP.' })
+      return
+    }
+
+    try {
+      const compressed = await compressImageFile(file)
+      updateOption(optionId, {
+        image: {
+          kind: 'data',
+          value: compressed.dataUrl,
+        },
+      })
+      onStatus({ kind: 'success', text: 'Картинка сжата и добавлена.' })
+    } catch (error) {
+      onStatus({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Не удалось обработать картинку.',
+      })
+    }
   }
 
   function addOption() {
@@ -637,6 +723,39 @@ function EditScreen({
         </div>
       ) : null}
 
+      {statusMessage ? (
+        <div className={statusMessage.kind === 'error' ? styles.validationBox : styles.statusBox} role="status">
+          {statusMessage.text}
+        </div>
+      ) : null}
+
+      <section className={styles.editorSection} aria-labelledby="exchange-title">
+        <h2 id="exchange-title">Файл и ссылка</h2>
+        <div className={styles.exchangeActions}>
+          <button className={styles.secondaryButton} type="button" onClick={onExportJson}>
+            Экспорт JSON
+          </button>
+          <label className={styles.fileButton}>
+            Импорт JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0]
+
+                if (file) {
+                  onImportJson(file)
+                  event.currentTarget.value = ''
+                }
+              }}
+            />
+          </label>
+          <button className={styles.secondaryButton} type="button" onClick={onShareLink}>
+            Скопировать ссылку
+          </button>
+        </div>
+      </section>
+
       <section className={styles.previewPanel} aria-label="Превью барабана">
         <WheelView
           config={config}
@@ -692,9 +811,21 @@ function EditScreen({
               key={option.id}
               option={option}
               onDelete={() => deleteOption(option.id)}
+              onImageUrlChange={(value) =>
+                updateOption(option.id, {
+                  image: value.trim()
+                    ? {
+                        kind: 'url',
+                        value: value.trim(),
+                      }
+                    : undefined,
+                })
+              }
               onMoveDown={() => moveOption(option.id, 1)}
               onMoveUp={() => moveOption(option.id, -1)}
+              onRemoveImage={() => updateOption(option.id, { image: undefined })}
               onUpdate={(patch) => updateOption(option.id, patch)}
+              onUploadImage={(file) => uploadOptionImage(option.id, file)}
             />
           ))}
         </div>
@@ -782,6 +913,9 @@ function OptionEditor({
   canMoveDown,
   canDelete,
   onUpdate,
+  onUploadImage,
+  onImageUrlChange,
+  onRemoveImage,
   onMoveUp,
   onMoveDown,
   onDelete,
@@ -792,6 +926,9 @@ function OptionEditor({
   canMoveDown: boolean
   canDelete: boolean
   onUpdate: (patch: Partial<WheelOption>) => void
+  onUploadImage: (file: File) => void
+  onImageUrlChange: (value: string) => void
+  onRemoveImage: () => void
   onMoveUp: () => void
   onMoveDown: () => void
   onDelete: () => void
@@ -858,17 +995,122 @@ function OptionEditor({
           />
         </label>
       </div>
+      <div className={styles.imageControls}>
+        <label className={styles.fileButton}>
+          Загрузить картинку
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0]
+
+              if (file) {
+                onUploadImage(file)
+                event.currentTarget.value = ''
+              }
+            }}
+          />
+        </label>
+        <label className={styles.field}>
+          <span>URL картинки</span>
+          <input
+            type="url"
+            value={option.image?.kind === 'url' ? option.image.value : ''}
+            onChange={(event) => onImageUrlChange(event.target.value)}
+            placeholder="https://example.com/image.webp"
+          />
+        </label>
+        {option.image ? (
+          <button className={styles.secondaryButton} type="button" onClick={onRemoveImage}>
+            Убрать картинку
+          </button>
+        ) : null}
+      </div>
     </article>
   )
 }
 
 function App() {
-  const [config, setConfig] = useState<WheelConfig>(() => cloneWheelConfig(demoWheelConfig))
+  const [config, setConfig] = useState<WheelConfig>(() => getInitialWheelConfig())
   const [mode, setMode] = useState<AppMode>('spin')
   const [history, setHistory] = useState<WheelHistory>(() =>
     reconcileHistoryForConfig(loadWheelHistory(demoWheelConfig.wheel.id), demoWheelConfig),
   )
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<AppMessage | undefined>()
   const validationMessages = useMemo(() => validateEditableConfig(config), [config])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    async function loadInitialConfig() {
+      const shareConfig = readShareConfigFromHash(window.location.hash)
+
+      if (!shareConfig.ok) {
+        const localConfig = await loadWheelConfig()
+        const nextConfig = localConfig ? cloneWheelConfig(localConfig) : getInitialWheelConfig()
+
+        if (isCancelled) {
+          return
+        }
+
+        setConfig(nextConfig)
+        setHistory(reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig))
+        setMode('spin')
+        setStatusMessage({
+          kind: 'error',
+          text: shareConfig.error,
+        })
+        setIsConfigLoaded(true)
+        return
+      }
+
+      if (shareConfig.value) {
+        const nextConfig = cloneWheelConfig(shareConfig.value)
+
+        await saveWheelConfig(nextConfig)
+
+        if (isCancelled) {
+          return
+        }
+
+        setConfig(nextConfig)
+        setHistory(reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig))
+        setMode('spin')
+        setStatusMessage({
+          kind: 'success',
+          text: 'Барабан из ссылки загружен. Картинки в ссылку не входят.',
+        })
+        setIsConfigLoaded(true)
+        return
+      }
+
+      const localConfig = await loadWheelConfig()
+      const nextConfig = localConfig ? cloneWheelConfig(localConfig) : getInitialWheelConfig()
+
+      if (isCancelled) {
+        return
+      }
+
+      setConfig(nextConfig)
+      setHistory(reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig))
+      setIsConfigLoaded(true)
+    }
+
+    void loadInitialConfig()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isConfigLoaded) {
+      return
+    }
+
+    void saveWheelConfig(config)
+  }, [config, isConfigLoaded])
 
   useEffect(() => {
     saveWheelHistory(history)
@@ -877,10 +1119,54 @@ function App() {
   function commitConfig(nextConfig: WheelConfig) {
     setConfig(nextConfig)
     setHistory((currentHistory) => reconcileHistoryForConfig(currentHistory, nextConfig))
+    setStatusMessage(undefined)
   }
 
   function handleHistoryChange(nextHistory: WheelHistory) {
     setHistory(nextHistory)
+  }
+
+  function applyImportedConfig(nextConfig: WheelConfig, message: string) {
+    const clonedConfig = cloneWheelConfig(nextConfig)
+
+    setConfig(clonedConfig)
+    setHistory(reconcileHistoryForConfig(loadWheelHistory(clonedConfig.wheel.id), clonedConfig))
+    setMode('spin')
+    setStatusMessage({ kind: 'success', text: message })
+    void saveWheelConfig(clonedConfig)
+  }
+
+  async function handleImportJson(file: File) {
+    const text = await readFileAsText(file)
+    const result = parseWheelConfigJson(text)
+
+    if (!result.ok) {
+      setStatusMessage({ kind: 'error', text: result.error })
+      return
+    }
+
+    applyImportedConfig(result.value, 'JSON импортирован. Открыт режим барабана.')
+  }
+
+  function handleExportJson() {
+    downloadJson(config)
+    setStatusMessage({ kind: 'success', text: 'JSON экспортирован.' })
+  }
+
+  async function handleShareLink() {
+    const shareUrl = getShareUrl(config)
+
+    if (!shareUrl.ok) {
+      setStatusMessage({ kind: 'error', text: shareUrl.error })
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl.value)
+      setStatusMessage({ kind: 'success', text: 'Ссылка скопирована. Картинки в нее не входят.' })
+    } catch {
+      setStatusMessage({ kind: 'error', text: 'Не удалось скопировать ссылку.' })
+    }
   }
 
   return (
@@ -895,13 +1181,23 @@ function App() {
           history={history}
           onEdit={() => setMode('edit')}
           onHistoryChange={handleHistoryChange}
+          statusMessage={statusMessage}
           validationMessages={validationMessages}
         />
       ) : (
         <EditScreen
           config={config}
           onConfigChange={commitConfig}
+          onExportJson={handleExportJson}
+          onImportJson={(file) => {
+            void handleImportJson(file)
+          }}
+          onShareLink={() => {
+            void handleShareLink()
+          }}
+          onStatus={setStatusMessage}
           onSpin={() => setMode('spin')}
+          statusMessage={statusMessage}
           validationMessages={validationMessages}
         />
       )}
