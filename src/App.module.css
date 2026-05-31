@@ -1,27 +1,60 @@
 .page {
+  --app-bg: #111827;
+  --page-text: #f9fafb;
+  --muted-text: #cbd5e1;
+  --panel-bg: rgb(255 255 255 / 8%);
+  --panel-border: rgb(255 255 255 / 12%);
+  --control-bg: rgb(255 255 255 / 12%);
+  --control-text: #ffffff;
+
   min-height: 100svh;
   display: grid;
   place-items: stretch;
   padding: 10px;
   box-sizing: border-box;
-  background: #111827;
-  color: #f9fafb;
+  background: var(--app-bg);
+  color: var(--page-text);
+}
+
+.page[data-theme='light'] {
+  --page-text: #111827;
+  --muted-text: #475569;
+  --panel-bg: rgb(255 255 255 / 76%);
+  --panel-border: rgb(15 23 42 / 14%);
+  --control-bg: rgb(15 23 42 / 9%);
+  --control-text: #111827;
 }
 
 .screen {
   width: min(100%, 480px);
   min-height: calc(100svh - 20px);
   display: grid;
-  grid-template-rows: auto minmax(280px, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(280px, 1fr) auto auto;
   gap: 10px;
   align-content: center;
   justify-self: center;
 }
 
-.header {
+.header,
+.editorHeader {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.headerRow,
+.editorHeader,
+.sectionHeader {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.headerRow h1,
+.editorHeader h1 {
+  min-width: 0;
+  color: var(--page-text);
 }
 
 .kicker {
@@ -35,7 +68,7 @@
 
 .description {
   margin: 0;
-  color: #cbd5e1;
+  color: var(--muted-text);
   font-size: 14px;
   line-height: 1.35;
 }
@@ -44,7 +77,13 @@
   position: relative;
   min-height: 280px;
   overflow: hidden;
-  border-block: 1px solid rgb(255 255 255 / 12%);
+  border-block: 1px solid var(--panel-border);
+}
+
+.previewPanel .wheelShell {
+  min-height: 318px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
 }
 
 .wheelViewport {
@@ -53,11 +92,15 @@
   overflow: hidden;
   touch-action: none;
   user-select: none;
-  cursor: grab;
+  cursor: default;
   -webkit-user-select: none;
 }
 
-.wheelViewport:active {
+.wheelViewport[data-interactive='true'] {
+  cursor: grab;
+}
+
+.wheelViewport[data-interactive='true']:active {
   cursor: grabbing;
 }
 
@@ -74,12 +117,12 @@
 
 .wheelViewport::before {
   top: 0;
-  background: linear-gradient(#111827, rgb(17 24 39 / 0%));
+  background: linear-gradient(var(--app-bg), rgb(17 24 39 / 0%));
 }
 
 .wheelViewport::after {
   bottom: 0;
-  background: linear-gradient(rgb(17 24 39 / 0%), #111827);
+  background: linear-gradient(rgb(17 24 39 / 0%), var(--app-bg));
 }
 
 .pointer {
@@ -92,7 +135,7 @@
   z-index: 4;
   height: 2px;
   background: var(--pointer-color);
-  box-shadow: 0 0 20px rgb(249 115 22 / 45%);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--pointer-color) 52%, transparent);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -200,20 +243,20 @@
   gap: 2px;
   min-height: 68px;
   padding: 12px;
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid var(--panel-border);
   border-radius: 8px;
-  background: rgb(255 255 255 / 8%);
+  background: var(--panel-bg);
   box-sizing: border-box;
 }
 
 .resultLabel {
-  color: #cbd5e1;
+  color: var(--muted-text);
   font-size: 12px;
 }
 
 .result strong {
   overflow: hidden;
-  color: #ffffff;
+  color: var(--page-text);
   font-size: 20px;
   line-height: 1.15;
   text-overflow: ellipsis;
@@ -222,7 +265,7 @@
 
 .result small {
   overflow: hidden;
-  color: #cbd5e1;
+  color: var(--muted-text);
   font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -233,16 +276,38 @@
 }
 
 .historyToggle,
-.clearButton {
+.clearButton,
+.primaryButton,
+.secondaryButton,
+.optionActions button {
   min-height: 44px;
   border: 0;
   border-radius: 8px;
-  color: #ffffff;
-  background: rgb(255 255 255 / 12%);
+  color: var(--control-text);
+  background: var(--control-bg);
 }
 
 .historyToggle {
   width: 100%;
+}
+
+.primaryButton {
+  padding: 0 14px;
+  background: #f97316;
+  color: #111827;
+  font-weight: 700;
+}
+
+.secondaryButton {
+  padding: 0 12px;
+}
+
+.historyToggle:disabled,
+.clearButton:disabled,
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.optionActions button:disabled {
+  opacity: 0.45;
 }
 
 .historyPanel {
@@ -268,7 +333,7 @@
   align-items: center;
   padding: 9px 10px;
   border-radius: 8px;
-  background: rgb(255 255 255 / 7%);
+  background: var(--panel-bg);
 }
 
 .historyItem span {
@@ -284,14 +349,14 @@
 }
 
 .historyItem strong {
-  color: #ffffff;
+  color: var(--page-text);
   font-size: 14px;
 }
 
 .historyItem small,
 .historyItem time,
 .emptyHistory {
-  color: #cbd5e1;
+  color: var(--muted-text);
   font-size: 12px;
 }
 
@@ -306,6 +371,171 @@
   text-align: center;
 }
 
+.editor {
+  width: min(100%, 920px);
+  display: grid;
+  gap: 12px;
+  justify-self: center;
+  padding-bottom: 20px;
+}
+
+.editorHeader {
+  padding-top: 4px;
+}
+
+.previewPanel,
+.editorSection,
+.validationBox,
+.optionEditor {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.previewPanel {
+  padding: 10px;
+}
+
+.editorSection,
+.validationBox,
+.optionEditor {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.editorSection h2,
+.optionEditor h3 {
+  margin: 0;
+  color: var(--page-text);
+  line-height: 1.15;
+}
+
+.editorSection h2 {
+  font-size: 20px;
+}
+
+.optionEditor h3 {
+  font-size: 16px;
+}
+
+.validationBox {
+  color: #fecaca;
+  background: rgb(127 29 29 / 34%);
+}
+
+.page[data-theme='light'] .validationBox {
+  color: #7f1d1d;
+  background: rgb(254 226 226 / 78%);
+}
+
+.validationBox strong {
+  color: inherit;
+}
+
+.validationBox ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+  margin: 0;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--page-text);
+  font-size: 14px;
+}
+
+.field input,
+.field textarea,
+.field select,
+.rangeField input[type='number'] {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 92%);
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.field input[type='color'] {
+  padding: 4px;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: #f87171;
+}
+
+.fieldError {
+  color: #fca5a5;
+}
+
+.colorGrid,
+.optionInlineFields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.colorGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rangeList,
+.optionEditors {
+  display: grid;
+  gap: 10px;
+}
+
+.rangeField {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  color: var(--page-text);
+  font-size: 14px;
+}
+
+.rangeField input[type='range'] {
+  width: 100%;
+}
+
+.numberInputWrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.numberInputWrap small {
+  color: var(--muted-text);
+}
+
+.optionEditorHeader {
+  display: grid;
+  gap: 10px;
+}
+
+.optionActions {
+  display: grid;
+  grid-template-columns: 44px 44px minmax(92px, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 380px) {
+  .colorGrid,
+  .optionInlineFields {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (min-width: 720px) {
   .page {
     padding: 24px;
@@ -317,7 +547,28 @@
   }
 
   .wheelShell {
-    border: 1px solid rgb(255 255 255 / 12%);
+    border: 1px solid var(--panel-border);
     border-radius: 8px;
+  }
+
+  .editor {
+    gap: 16px;
+  }
+
+  .editorSection,
+  .validationBox,
+  .optionEditor,
+  .previewPanel {
+    padding: 16px;
+  }
+
+  .rangeField {
+    grid-template-columns: 220px minmax(160px, 1fr) 120px;
+    align-items: center;
+  }
+
+  .optionEditorHeader {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 }
