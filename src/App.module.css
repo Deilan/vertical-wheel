@@ -1,0 +1,77 @@
+.page {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  box-sizing: border-box;
+  background: #111827;
+  color: #f9fafb;
+}
+
+.panel {
+  width: min(100%, 460px);
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: #f97316;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.description {
+  margin: 0 0 24px;
+  color: #cbd5e1;
+}
+
+.optionList {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 8%);
+  box-sizing: border-box;
+}
+
+.emoji {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 12%);
+  font-size: 28px;
+}
+
+.option strong,
+.option small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option strong {
+  color: #ffffff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.option small {
+  margin-top: 4px;
+  color: #cbd5e1;
+  font-size: 14px;
+}

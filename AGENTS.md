@@ -68,3 +68,16 @@ Quality:
   - npm run typecheck
   - npm run test:run
   - npm run build
+
+## Environment
+
+This project is developed in WSL.
+
+Do not use PowerShell, cmd.exe, Windows node.exe, or /mnt/c/Program Files/nodejs.
+
+Expected:
+- node: /usr/local/bin/node
+- npm: /usr/local/bin/npm
+- npx: /usr/local/bin/npx
+- Node platform: linux x64
+- Node temp dir: /tmp
