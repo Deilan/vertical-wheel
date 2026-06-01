@@ -54,4 +54,40 @@ describe('history logic', () => {
 
     expect(reconcileHistoryForConfig(history, semanticChanged).entries).toHaveLength(0)
   })
+
+  it('resets history when option order changes', () => {
+    const history = addHistoryEntry(
+      reconcileHistoryForConfig(undefined, demoWheelConfig),
+      createHistoryEntry(demoWheelConfig.wheel.options[0], new Date('2026-01-01T00:00:00.000Z')),
+    )
+    const orderChanged = {
+      ...demoWheelConfig,
+      wheel: {
+        ...demoWheelConfig.wheel,
+        options: [
+          demoWheelConfig.wheel.options[1],
+          demoWheelConfig.wheel.options[0],
+          ...demoWheelConfig.wheel.options.slice(2),
+        ],
+      },
+    }
+
+    expect(reconcileHistoryForConfig(history, orderChanged).entries).toHaveLength(0)
+  })
+
+  it('resets history when option count changes', () => {
+    const history = addHistoryEntry(
+      reconcileHistoryForConfig(undefined, demoWheelConfig),
+      createHistoryEntry(demoWheelConfig.wheel.options[0], new Date('2026-01-01T00:00:00.000Z')),
+    )
+    const countChanged = {
+      ...demoWheelConfig,
+      wheel: {
+        ...demoWheelConfig.wheel,
+        options: demoWheelConfig.wheel.options.slice(0, -1),
+      },
+    }
+
+    expect(reconcileHistoryForConfig(history, countChanged).entries).toHaveLength(0)
+  })
 })

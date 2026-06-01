@@ -13,6 +13,25 @@ describe('spin physics', () => {
     expect(isValidSpinGesture(80, -350)).toBe(true)
   })
 
+  it('accepts exact threshold values as a valid spin gesture', () => {
+    expect(
+      isValidSpinGesture(
+        defaultSpinPhysicsConfig.minDragDistancePx,
+        defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
+      ),
+    ).toBe(true)
+
+    const result = calculateSpinOutcome({
+      currentPositionPx: 0,
+      dragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
+      releaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
+      cardStepPx: 100,
+      jitterCards: 0,
+    })
+
+    expect(result.kind).toBe('spin')
+  })
+
   it('snaps weak gestures to the nearest card center without a spin result', () => {
     const result = calculateSpinOutcome({
       currentPositionPx: 178,
@@ -81,5 +100,17 @@ describe('spin physics', () => {
     expect(snapPositionToCard(149, 100)).toBe(100)
     expect(snapPositionToCard(151, 100)).toBe(200)
     expect(snapPositionToCard(-151, 100)).toBe(-200)
+  })
+
+  it('rejects nonpositive card steps', () => {
+    expect(() => snapPositionToCard(100, 0)).toThrow('Шаг карточки должен быть положительным.')
+    expect(() =>
+      calculateSpinOutcome({
+        currentPositionPx: 0,
+        dragDistancePx: 120,
+        releaseVelocityPxPerSec: 900,
+        cardStepPx: -1,
+      }),
+    ).toThrow('Шаг карточки должен быть положительным.')
   })
 })
