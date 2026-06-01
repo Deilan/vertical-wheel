@@ -5,6 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:host": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "tunnel:cloudflare": "cloudflared tunnel --protocol http2 --url http://localhost:5173",
+    "qa:start": "bash scripts/qa-start.sh",
+    "qa:stop": "bash scripts/qa-stop.sh",
+    "qa:status": "bash scripts/qa-status.sh",
+    "qa:logs": "bash scripts/qa-logs.sh",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

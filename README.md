@@ -44,6 +44,63 @@ npm run dev
 
 После запуска откройте локальный URL, который покажет Vite, обычно `http://localhost:5173/`.
 
+## Тестирование на телефоне и через tunnel
+
+Для проверки в локальной сети запустите dev server на всех интерфейсах:
+
+```bash
+npm run dev:host
+```
+
+Откройте приложение на телефоне по LAN-адресу компьютера, например `http://192.168.1.10:5173/`. Телефон и компьютер должны быть в одной сети, а firewall должен разрешать входящие подключения к порту `5173`.
+
+Для проверки через Cloudflare Quick Tunnel используйте два терминала:
+
+```bash
+npm run dev:host
+```
+
+```bash
+npm run tunnel:cloudflare
+```
+
+`cloudflared` напечатает временный URL вида `https://...trycloudflare.com`. Этот URL меняется при каждом новом запуске tunnel. В `vite.config.ts` разрешен host `.trycloudflare.com`, чтобы Vite принимал запросы от Cloudflare Quick Tunnel без `allowedHosts: true`.
+
+Пока tunnel запущен, любой человек с этим URL может открыть ваш dev server. После тестирования остановите `cloudflared` в терминале.
+
+Для QA-сессий можно запустить dev server и tunnel одной командой:
+
+```bash
+npm run qa:start
+```
+
+Команда стартует Vite на фиксированном порту `5173`, запускает `cloudflared tunnel --protocol http2 --url http://localhost:5173`, пишет PID-файлы и логи в `.qa-runtime/`, а затем печатает Cloudflare URL, если он уже появился в логе. URL Cloudflare остается стабильным, пока работает тот же процесс `cloudflared`; при новом запуске tunnel будет создан новый URL.
+
+Проверить состояние:
+
+```bash
+npm run qa:status
+```
+
+Посмотреть последние логи:
+
+```bash
+npm run qa:logs
+```
+
+Остановить dev server и tunnel:
+
+```bash
+npm run qa:stop
+```
+
+Логи сохраняются после остановки:
+
+- `.qa-runtime/vite.log`
+- `.qa-runtime/cloudflared.log`
+
+Vite можно перезапускать, пока tunnel остается открытым, если dev server снова поднимается на `http://localhost:5173`. Пока tunnel запущен, любой человек с Cloudflare URL может открыть ваш dev server, поэтому после тестирования обязательно выполните `npm run qa:stop` или остановите `cloudflared`.
+
 ## Проверки
 
 ```bash
