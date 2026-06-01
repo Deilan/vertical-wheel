@@ -35,6 +35,8 @@ function stripOptionImage(option: WheelOption): WheelOption {
     emoji: option.emoji,
     backgroundColor: option.backgroundColor,
     textColor: option.textColor,
+    afterResultBehavior: option.afterResultBehavior,
+    askAllowedDecisions: option.askAllowedDecisions,
   }
 }
 

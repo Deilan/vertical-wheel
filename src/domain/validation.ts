@@ -1,5 +1,11 @@
 import type { ValidationResult, WheelConfig, WheelImage, WheelOption, WheelSettings } from './types'
 import { WHEEL_LIMITS, WHEEL_SETTING_LIMITS } from './types'
+import {
+  defaultAfterResultBehavior,
+  defaultAskAllowedDecisions,
+  defaultExcludedOptionDisplayMode,
+  validateAskAllowedDecisions,
+} from './optionExclusion'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -45,6 +51,44 @@ function validateImage(value: unknown): ValidationResult<WheelImage | undefined>
   return { ok: true, value: { kind: value.kind, value: value.value } }
 }
 
+function validateAfterResultBehavior(value: unknown): ValidationResult<WheelSettings['afterResultBehavior']> {
+  if (value === undefined) {
+    return { ok: true, value: defaultAfterResultBehavior }
+  }
+
+  if (value !== 'keep' && value !== 'exclude' && value !== 'ask') {
+    return { ok: false, error: 'Поведение после результата должно быть keep, exclude или ask.' }
+  }
+
+  return { ok: true, value }
+}
+
+function validateExcludedOptionDisplayMode(value: unknown): ValidationResult<WheelSettings['excludedOptionDisplayMode']> {
+  if (value === undefined) {
+    return { ok: true, value: defaultExcludedOptionDisplayMode }
+  }
+
+  if (value !== 'hide' && value !== 'show-disabled') {
+    return { ok: false, error: 'Режим показа исключённых опций должен быть hide или show-disabled.' }
+  }
+
+  return { ok: true, value }
+}
+
+function validateOptionAfterResultBehavior(
+  value: unknown,
+): ValidationResult<WheelOption['afterResultBehavior']> {
+  if (value === undefined) {
+    return { ok: true, value: undefined }
+  }
+
+  if (value !== 'inherit' && value !== 'keep' && value !== 'exclude' && value !== 'ask') {
+    return { ok: false, error: 'Поведение опции после результата должно быть inherit, keep, exclude или ask.' }
+  }
+
+  return { ok: true, value }
+}
+
 function validateSettings(value: unknown): ValidationResult<WheelSettings> {
   if (!isRecord(value)) {
     return { ok: false, error: 'Настройки барабана должны быть объектом.' }
@@ -64,6 +108,23 @@ function validateSettings(value: unknown): ValidationResult<WheelSettings> {
   const titleFontSizePx = value.titleFontSizePx
   const subtitleFontSizePx = value.subtitleFontSizePx
   const cardBorderRadiusPx = value.cardBorderRadiusPx
+  const afterResultBehavior = validateAfterResultBehavior(value.afterResultBehavior)
+  if (!afterResultBehavior.ok) {
+    return afterResultBehavior
+  }
+
+  const excludedOptionDisplayMode = validateExcludedOptionDisplayMode(value.excludedOptionDisplayMode)
+  if (!excludedOptionDisplayMode.ok) {
+    return excludedOptionDisplayMode
+  }
+
+  const askAllowedDecisions =
+    value.askAllowedDecisions === undefined
+      ? { ok: true as const, value: [...defaultAskAllowedDecisions] }
+      : validateAskAllowedDecisions(value.askAllowedDecisions)
+  if (!askAllowedDecisions.ok) {
+    return askAllowedDecisions
+  }
 
   for (const field of Object.keys(WHEEL_SETTING_LIMITS) as Array<keyof typeof WHEEL_SETTING_LIMITS>) {
     if (!validateNumberRange(value[field], field)) {
@@ -84,6 +145,9 @@ function validateSettings(value: unknown): ValidationResult<WheelSettings> {
       titleFontSizePx: titleFontSizePx as number,
       subtitleFontSizePx: subtitleFontSizePx as number,
       cardBorderRadiusPx: cardBorderRadiusPx as number,
+      afterResultBehavior: afterResultBehavior.value,
+      excludedOptionDisplayMode: excludedOptionDisplayMode.value,
+      askAllowedDecisions: askAllowedDecisions.value,
     },
   }
 }
@@ -117,6 +181,19 @@ function validateOption(value: unknown): ValidationResult<WheelOption> {
     return { ok: false, error: 'Цвета опции должны быть непустыми строками.' }
   }
 
+  const afterResultBehavior = validateOptionAfterResultBehavior(value.afterResultBehavior)
+  if (!afterResultBehavior.ok) {
+    return afterResultBehavior
+  }
+
+  const askAllowedDecisions =
+    value.askAllowedDecisions === undefined
+      ? { ok: true as const, value: undefined }
+      : validateAskAllowedDecisions(value.askAllowedDecisions)
+  if (!askAllowedDecisions.ok) {
+    return askAllowedDecisions
+  }
+
   const image = validateImage(value.image)
   if (!image.ok) {
     return image
@@ -132,6 +209,8 @@ function validateOption(value: unknown): ValidationResult<WheelOption> {
       image: image.value,
       backgroundColor: value.backgroundColor,
       textColor: value.textColor,
+      afterResultBehavior: afterResultBehavior.value,
+      askAllowedDecisions: askAllowedDecisions.value,
     },
   }
 }

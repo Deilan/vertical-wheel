@@ -68,6 +68,38 @@ describe('share config serialization', () => {
     expect(stripped.wheel.options.every((option) => option.image === undefined)).toBe(true)
   })
 
+  it('keeps exclusion behavior rules in shared configs', () => {
+    const config: WheelConfig = {
+      ...demoWheelConfig,
+      wheel: {
+        ...demoWheelConfig.wheel,
+        settings: {
+          ...demoWheelConfig.wheel.settings,
+          afterResultBehavior: 'ask',
+          excludedOptionDisplayMode: 'show-disabled',
+          askAllowedDecisions: ['keep', 'exclude-show-disabled'],
+        },
+        options: demoWheelConfig.wheel.options.map((option, index) =>
+          index === 0
+            ? {
+                ...option,
+                afterResultBehavior: 'exclude',
+                askAllowedDecisions: ['keep', 'exclude-hide'],
+              }
+            : option,
+        ),
+      },
+    }
+    const stripped = stripImagesFromConfig(config)
+
+    expect(stripped.wheel.settings.afterResultBehavior).toBe('ask')
+    expect(stripped.wheel.settings.excludedOptionDisplayMode).toBe('show-disabled')
+    expect(stripped.wheel.settings.askAllowedDecisions).toEqual(['keep', 'exclude-show-disabled'])
+    expect(stripped.wheel.options[0].afterResultBehavior).toBe('exclude')
+    expect(stripped.wheel.options[0].askAllowedDecisions).toEqual(['keep', 'exclude-hide'])
+    expect('excludedOptions' in stripped).toBe(false)
+  })
+
   it('does not restore images after decoding a shared config', () => {
     const encoded = encodeShareConfig(configWithUnicodeAndImages())
     expect(encoded.ok).toBe(true)

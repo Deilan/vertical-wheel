@@ -2,6 +2,14 @@ export type WheelConfigVersion = 1
 
 export type WheelTheme = 'dark' | 'light'
 
+export type AfterResultBehavior = 'keep' | 'exclude' | 'ask'
+
+export type OptionAfterResultBehavior = 'inherit' | 'keep' | 'exclude' | 'ask'
+
+export type ExcludedOptionDisplayMode = 'hide' | 'show-disabled'
+
+export type AfterResultDecision = 'keep' | 'exclude-hide' | 'exclude-show-disabled'
+
 export type WheelImage = {
   kind: 'url' | 'data'
   value: string
@@ -17,6 +25,9 @@ export type WheelSettings = {
   titleFontSizePx: number
   subtitleFontSizePx: number
   cardBorderRadiusPx: number
+  afterResultBehavior: AfterResultBehavior
+  excludedOptionDisplayMode: ExcludedOptionDisplayMode
+  askAllowedDecisions: AfterResultDecision[]
 }
 
 export type WheelOption = {
@@ -27,6 +38,8 @@ export type WheelOption = {
   image?: WheelImage
   backgroundColor: string
   textColor: string
+  afterResultBehavior?: OptionAfterResultBehavior
+  askAllowedDecisions?: AfterResultDecision[]
 }
 
 export type WheelConfig = {
@@ -52,6 +65,16 @@ export type WheelHistory = {
   wheelId: string
   fingerprint: string
   entries: HistoryEntry[]
+}
+
+export type ExcludedOptionState = {
+  optionId: string
+  displayMode: ExcludedOptionDisplayMode
+}
+
+export type WheelSessionState = {
+  wheelFingerprint: string
+  excludedOptions: ExcludedOptionState[]
 }
 
 export type ValidationResult<T> =

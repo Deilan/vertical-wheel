@@ -10,6 +10,9 @@ export const defaultWheelSettings: WheelSettings = {
   titleFontSizePx: 22,
   subtitleFontSizePx: 15,
   cardBorderRadiusPx: 18,
+  afterResultBehavior: 'keep',
+  excludedOptionDisplayMode: 'hide',
+  askAllowedDecisions: ['keep', 'exclude-hide', 'exclude-show-disabled'],
 }
 
 export const demoWheelConfig: WheelConfig = {
