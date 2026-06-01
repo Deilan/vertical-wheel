@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { getCyclicWheelRepeatCycles, normalizeCyclicWheelPosition } from './cyclicWheel'
+import {
+  getCyclicWheelRepeatCycles,
+  getPointerAlignedRepeatedIndex,
+  normalizeCyclicWheelPosition,
+} from './cyclicWheel'
 
 describe('cyclic wheel rendering helpers', () => {
   it('normalizes large positive and negative positions into one option cycle', () => {
@@ -29,5 +33,11 @@ describe('cyclic wheel rendering helpers', () => {
     expect(repeatCycles % 2).toBe(1)
     expect(centerIndex - maxTravel).toBeGreaterThanOrEqual(0)
     expect(centerIndex + optionCount + maxTravel).toBeLessThan(repeatCycles * optionCount)
+  })
+
+  it('maps the pointer-aligned card to one repeated visual index', () => {
+    expect(getPointerAlignedRepeatedIndex(0, 100, 5, 20)).toBe(20)
+    expect(getPointerAlignedRepeatedIndex(240, 100, 5, 20)).toBe(22)
+    expect(getPointerAlignedRepeatedIndex(-160, 100, 5, 20)).toBe(18)
   })
 })

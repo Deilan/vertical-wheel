@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent } from 'react'
 import {
   getCyclicWheelRepeatCycles,
+  getPointerAlignedRepeatedIndex,
   normalizeCyclicWheelPosition,
 } from './domain/cyclicWheel'
 import { demoWheelConfig } from './domain/demoWheel'
@@ -273,6 +274,7 @@ function WheelView({
   positionPx,
   transitionMs,
   isInteractive,
+  showActiveHighlight = true,
   viewportRef,
   onPointerDown,
   onPointerMove,
@@ -282,6 +284,7 @@ function WheelView({
   positionPx: number
   transitionMs: number
   isInteractive: boolean
+  showActiveHighlight?: boolean
   viewportRef?: React.RefObject<HTMLDivElement | null>
   onPointerDown?: (event: PointerEvent<HTMLDivElement>) => void
   onPointerMove?: (event: PointerEvent<HTMLDivElement>) => void
@@ -296,7 +299,15 @@ function WheelView({
   )
   const centerCycle = Math.floor(repeatCycles / 2)
   const baseOptionIndex = centerCycle * options.length
-  const activeOption = options.length > 0 ? getWinningOption(options, positionPx, cardStepPx) : undefined
+  const activeRepeatedIndex =
+    showActiveHighlight && options.length > 0
+      ? getPointerAlignedRepeatedIndex(
+          positionPx,
+          cardStepPx,
+          options.length,
+          baseOptionIndex,
+        )
+      : undefined
   const trackTranslatePx =
     wheelHeightPx / 2 -
     (baseOptionIndex * cardStepPx + settings.cardHeightPx / 2) -
@@ -304,9 +315,10 @@ function WheelView({
   const repeatedOptions = useMemo(
     () =>
       Array.from({ length: repeatCycles }, (_, cycleIndex) =>
-        options.map((option) => ({
+        options.map((option, optionIndex) => ({
           option,
           key: `${cycleIndex}-${option.id}`,
+          repeatedIndex: cycleIndex * options.length + optionIndex,
         })),
       ).flat(),
     [options, repeatCycles],
@@ -357,9 +369,9 @@ function WheelView({
             } as CSSProperties
           }
         >
-          {repeatedOptions.map(({ option, key }) => (
+          {repeatedOptions.map(({ option, key, repeatedIndex }) => (
             <WheelCard
-              isActive={option.id === activeOption?.id}
+              isActive={repeatedIndex === activeRepeatedIndex}
               key={key}
               option={option}
               settings={settings}
@@ -389,6 +401,7 @@ function SpinScreen({
   const [positionPx, setPositionPx] = useState(0)
   const [transitionMs, setTransitionMs] = useState(0)
   const [isAnimating, setIsAnimating] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const wheelRef = useRef<HTMLDivElement | null>(null)
   const gestureRef = useRef<GestureState | null>(null)
@@ -485,6 +498,7 @@ function SpinScreen({
       startY: event.clientY,
       positionPx: startPositionPx,
     })
+    setIsDragging(true)
     gestureRef.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
@@ -526,6 +540,7 @@ function SpinScreen({
     }
 
     gestureRef.current = null
+    setIsDragging(false)
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -616,6 +631,7 @@ function SpinScreen({
         onPointerEnd={endGesture}
         onPointerMove={handlePointerMove}
         positionPx={positionPx}
+        showActiveHighlight={!isDragging && !isAnimating}
         transitionMs={transitionMs}
         viewportRef={wheelRef}
       />

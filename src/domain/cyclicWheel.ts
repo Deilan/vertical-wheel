@@ -34,3 +34,20 @@ export function getCyclicWheelRepeatCycles(
 
   return repeatCycles % 2 === 0 ? repeatCycles + 1 : repeatCycles
 }
+
+export function getPointerAlignedRepeatedIndex(
+  positionPx: number,
+  cardStepPx: number,
+  optionCount: number,
+  baseOptionIndex: number,
+): number {
+  if (optionCount <= 0) {
+    throw new Error('Для циклического барабана нужна хотя бы одна опция.')
+  }
+
+  if (cardStepPx <= 0) {
+    throw new Error('Шаг карточки должен быть положительным.')
+  }
+
+  return baseOptionIndex + Math.round(positionPx / cardStepPx)
+}
