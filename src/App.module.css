@@ -296,6 +296,15 @@
   white-space: nowrap;
 }
 
+.resultStatus {
+  overflow: hidden;
+  color: var(--muted-text);
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .resultActions,
 .sessionStatus {
   display: flex;
@@ -311,6 +320,38 @@
   background: var(--panel-bg);
   color: var(--muted-text);
   font-size: 13px;
+}
+
+.compactStatus,
+.compactError,
+.compactWarning {
+  padding: 7px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.compactStatus {
+  color: #bbf7d0;
+  background: rgb(20 83 45 / 22%);
+}
+
+.compactError,
+.compactWarning {
+  color: #fecaca;
+  background: rgb(127 29 29 / 24%);
+}
+
+.page[data-theme='light'] .compactStatus {
+  color: #14532d;
+  background: rgb(220 252 231 / 62%);
+}
+
+.page[data-theme='light'] .compactError,
+.page[data-theme='light'] .compactWarning {
+  color: #7f1d1d;
+  background: rgb(254 226 226 / 62%);
 }
 
 .inlineButton {

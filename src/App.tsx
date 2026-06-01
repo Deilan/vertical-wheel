@@ -854,7 +854,7 @@ function SpinScreen({
       </section>
 
       {activeOptionCount < 2 ? (
-        <div className={styles.validationBox} role="alert">
+        <div className={styles.compactWarning} role="alert">
           {activeOptionCount === 1
             ? 'Осталась одна активная опция. Верните исключённые опции.'
             : 'Нет активных опций. Верните исключённые опции.'}
@@ -862,7 +862,7 @@ function SpinScreen({
       ) : null}
 
       {statusMessage ? (
-        <div className={statusMessage.kind === 'error' ? styles.validationBox : styles.statusBox} role="status">
+        <div className={statusMessage.kind === 'error' ? styles.compactError : styles.compactStatus} role="status">
           {statusMessage.text}
         </div>
       ) : null}
@@ -885,7 +885,7 @@ function SpinScreen({
         <span className={styles.resultLabel}>Последний результат</span>
         <strong>{lastResult ? lastResult.title : 'Проведите по барабану'}</strong>
         {lastResult?.subtitle ? <small>{lastResult.subtitle}</small> : null}
-        {resultStatus ? <small>{resultStatus}</small> : null}
+        {resultStatus ? <span className={styles.resultStatus}>{resultStatus}</span> : null}
         {pendingDecision ? (
           <div className={styles.resultActions}>
             {afterResultDecisionOptions
