@@ -26,6 +26,7 @@ import {
   saveWheelHistory,
 } from './storage/historyStorage'
 import { loadWheelConfig, saveWheelConfig } from './storage/wheelStorage'
+import { debugLogger } from './utils/debugLogger'
 import { compressImageFile, isSupportedImageFile } from './utils/imageCompression'
 import styles from './App.module.css'
 
@@ -127,6 +128,34 @@ function readFileAsText(file: File): Promise<string> {
   return file.text()
 }
 
+function getWheelSummary(config: WheelConfig) {
+  return {
+    wheelId: config.wheel.id,
+    title: config.wheel.title,
+    optionCount: config.wheel.options.length,
+    theme: config.wheel.settings.theme,
+  }
+}
+
+function getOptionSummary(option: WheelOption) {
+  return {
+    optionId: option.id,
+    title: option.title,
+    hasSubtitle: Boolean(option.subtitle),
+    hasEmoji: Boolean(option.emoji),
+    hasImage: Boolean(option.image),
+    image: option.image,
+  }
+}
+
+function getHistorySummary(history: WheelHistory) {
+  return {
+    wheelId: history.wheelId,
+    entries: history.entries.length,
+    fingerprint: history.fingerprint,
+  }
+}
+
 function getCardStepPx(settings: WheelSettings): number {
   return settings.cardHeightPx + settings.cardGapPx
 }
@@ -184,6 +213,14 @@ function createEmptyOption(): WheelOption {
     backgroundColor: '#f8fafc',
     textColor: '#111827',
   }
+}
+
+function copyTextToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard) {
+    return navigator.clipboard.writeText(value)
+  }
+
+  return Promise.reject(new Error('Clipboard API is unavailable.'))
 }
 
 function WheelCard({
@@ -378,12 +415,21 @@ function SpinScreen({
     animationTimerRef.current = undefined
     setIsAnimating(false)
     setTransitionMs(0)
+    debugLogger.log('spin', 'animation_end', {
+      finalPositionPx: positionRef.current,
+      hasResult: Boolean(result),
+    })
 
     if (!result) {
       return
     }
 
-    onHistoryChange(addHistoryEntry(history, createHistoryEntry(result)))
+    const nextHistory = addHistoryEntry(history, createHistoryEntry(result))
+    debugLogger.log('history', 'add', {
+      result: getOptionSummary(result),
+      history: getHistorySummary(nextHistory),
+    })
+    onHistoryChange(nextHistory)
   }
 
   function animateTo(finalPositionPx: number, durationMs: number, result?: WheelOption) {
@@ -395,6 +441,11 @@ function SpinScreen({
     setIsAnimating(true)
     setTransitionMs(durationMs)
     setPositionPx(finalPositionPx)
+    debugLogger.log('spin', 'animation_start', {
+      finalPositionPx,
+      durationMs,
+      hasResult: Boolean(result),
+    })
     animationTimerRef.current = window.setTimeout(finishAnimation, durationMs + 40)
   }
 
@@ -405,6 +456,11 @@ function SpinScreen({
 
     event.currentTarget.setPointerCapture(event.pointerId)
     const timeMs = performance.now()
+    debugLogger.log('spin', 'pointer_down', {
+      pointerType: event.pointerType,
+      startY: event.clientY,
+      positionPx: positionRef.current,
+    })
     gestureRef.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
@@ -452,6 +508,12 @@ function SpinScreen({
     const pointerVelocityPxPerSec =
       ((gesture.lastY - gesture.previousY) / timeDeltaMs) * 1000
     const releaseVelocityPxPerSec = -pointerVelocityPxPerSec
+    debugLogger.log('spin', 'pointer_up', {
+      pointerType: event.pointerType,
+      dragDistancePx,
+      releaseVelocityPxPerSec,
+      positionPx: positionRef.current,
+    })
     const outcome = calculateSpinOutcome({
       currentPositionPx: positionRef.current,
       dragDistancePx,
@@ -464,12 +526,26 @@ function SpinScreen({
         ? getWinningOption(config.wheel.options, outcome.finalPositionPx, cardStepPx)
         : undefined
 
+    debugLogger.log('spin', outcome.kind === 'spin' ? 'valid_spin' : 'weak_gesture', {
+      outcome,
+      dragDistancePx,
+      releaseVelocityPxPerSec,
+    })
+
+    if (result) {
+      debugLogger.log('spin', 'result_selection', {
+        result: getOptionSummary(result),
+        finalPositionPx: outcome.finalPositionPx,
+      })
+    }
+
     animateTo(outcome.finalPositionPx, outcome.durationMs, result)
   }
 
   function handleClearHistory() {
     const nextHistory = clearHistory(config)
     saveWheelHistory(nextHistory)
+    debugLogger.log('history', 'clear', getHistorySummary(nextHistory))
     onHistoryChange(nextHistory)
   }
 
@@ -618,6 +694,7 @@ function EditScreen({
   }
 
   function updateSettings(patch: Partial<WheelSettings>) {
+    debugLogger.log('editor', 'visual_setting_change', patch)
     updateWheel({
       settings: {
         ...wheel.settings,
@@ -627,6 +704,18 @@ function EditScreen({
   }
 
   function updateOption(optionId: string, patch: Partial<WheelOption>) {
+    if ('title' in patch || 'subtitle' in patch) {
+      debugLogger.log('editor', 'semantic_option_change', {
+        optionId,
+        patch,
+      })
+    } else if ('emoji' in patch || 'backgroundColor' in patch || 'textColor' in patch) {
+      debugLogger.log('editor', 'option_visual_change', {
+        optionId,
+        patch,
+      })
+    }
+
     updateWheel({
       options: wheel.options.map((option) =>
         option.id === optionId ? { ...option, ...patch } : option,
@@ -636,6 +725,13 @@ function EditScreen({
 
   async function uploadOptionImage(optionId: string, file: File) {
     if (!isSupportedImageFile(file)) {
+      debugLogger.log('image', 'upload_error', {
+        optionId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        error: 'unsupported_type',
+      })
       onStatus({ kind: 'error', text: 'Поддерживаются только PNG, JPG, JPEG и WebP.' })
       return
     }
@@ -648,8 +744,22 @@ function EditScreen({
           value: compressed.dataUrl,
         },
       })
+      debugLogger.log('image', 'upload_success', {
+        optionId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        compressed,
+      })
       onStatus({ kind: 'success', text: 'Картинка сжата и добавлена.' })
     } catch (error) {
+      debugLogger.log('image', 'upload_error', {
+        optionId,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
       onStatus({
         kind: 'error',
         text: error instanceof Error ? error.message : 'Не удалось обработать картинку.',
@@ -662,8 +772,13 @@ function EditScreen({
       return
     }
 
+    const option = createEmptyOption()
+    debugLogger.log('editor', 'option_add', {
+      option: getOptionSummary(option),
+      nextOptionCount: wheel.options.length + 1,
+    })
     updateWheel({
-      options: [...wheel.options, createEmptyOption()],
+      options: [...wheel.options, option],
     })
   }
 
@@ -672,6 +787,10 @@ function EditScreen({
       return
     }
 
+    debugLogger.log('editor', 'option_delete', {
+      optionId,
+      nextOptionCount: wheel.options.length - 1,
+    })
     updateWheel({
       options: wheel.options.filter((option) => option.id !== optionId),
     })
@@ -688,6 +807,11 @@ function EditScreen({
     const nextOptions = [...wheel.options]
     const [option] = nextOptions.splice(index, 1)
     nextOptions.splice(nextIndex, 0, option)
+    debugLogger.log('editor', 'option_reorder', {
+      optionId,
+      fromIndex: index,
+      toIndex: nextIndex,
+    })
     updateWheel({ options: nextOptions })
   }
 
@@ -811,7 +935,12 @@ function EditScreen({
               key={option.id}
               option={option}
               onDelete={() => deleteOption(option.id)}
-              onImageUrlChange={(value) =>
+              onImageUrlChange={(value) => {
+                debugLogger.log('image', 'url_set', {
+                  optionId: option.id,
+                  url: value,
+                  isEmpty: value.trim().length === 0,
+                })
                 updateOption(option.id, {
                   image: value.trim()
                     ? {
@@ -820,10 +949,16 @@ function EditScreen({
                       }
                     : undefined,
                 })
-              }
+              }}
               onMoveDown={() => moveOption(option.id, 1)}
               onMoveUp={() => moveOption(option.id, -1)}
-              onRemoveImage={() => updateOption(option.id, { image: undefined })}
+              onRemoveImage={() => {
+                debugLogger.log('image', 'remove', {
+                  optionId: option.id,
+                  image: option.image,
+                })
+                updateOption(option.id, { image: undefined })
+              }}
               onUpdate={(patch) => updateOption(option.id, patch)}
               onUploadImage={(file) => uploadOptionImage(option.id, file)}
             />
@@ -1030,7 +1165,52 @@ function OptionEditor({
   )
 }
 
+function DebugPanel({
+  events,
+  onClear,
+  onCopy,
+}: {
+  events: ReturnType<typeof debugLogger.getEvents>
+  onClear: () => void
+  onCopy: () => void
+}) {
+  const recentEvents = events.slice(-20).reverse()
+
+  return (
+    <aside className={styles.debugPanel} aria-label="Диагностический режим">
+      <div className={styles.debugPanelHeader}>
+        <strong>Debug: включен</strong>
+        <span>{events.length}/300</span>
+      </div>
+      <div className={styles.debugActions}>
+        <button type="button" onClick={onCopy}>
+          Скопировать лог
+        </button>
+        <button type="button" onClick={onClear}>
+          Очистить лог
+        </button>
+      </div>
+      <details>
+        <summary>Последние события</summary>
+        <ol className={styles.debugEventList}>
+          {recentEvents.map((event) => (
+            <li key={event.id}>
+              <code>
+                {event.timestamp} [{event.category}] {event.name}
+              </code>
+            </li>
+          ))}
+        </ol>
+      </details>
+    </aside>
+  )
+}
+
 function App() {
+  const [isDebugEnabled, setIsDebugEnabled] = useState(() =>
+    debugLogger.configureFromSearch(window.location.search, window.sessionStorage),
+  )
+  const [debugEvents, setDebugEvents] = useState(debugLogger.getEvents())
   const [config, setConfig] = useState<WheelConfig>(() => getInitialWheelConfig())
   const [mode, setMode] = useState<AppMode>('spin')
   const [history, setHistory] = useState<WheelHistory>(() =>
@@ -1041,12 +1221,26 @@ function App() {
   const validationMessages = useMemo(() => validateEditableConfig(config), [config])
 
   useEffect(() => {
+    return debugLogger.subscribe(() => {
+      setIsDebugEnabled(debugLogger.isEnabled())
+      setDebugEvents(debugLogger.getEvents())
+    })
+  }, [])
+
+  useEffect(() => {
     let isCancelled = false
 
     async function loadInitialConfig() {
+      debugLogger.log('app', 'initialization_start', {
+        hashPresent: window.location.hash.length > 0,
+        search: window.location.search,
+      })
       const shareConfig = readShareConfigFromHash(window.location.hash)
 
       if (!shareConfig.ok) {
+        debugLogger.log('share', 'decode_error', {
+          error: shareConfig.error,
+        })
         const localConfig = await loadWheelConfig()
         const nextConfig = localConfig ? cloneWheelConfig(localConfig) : getInitialWheelConfig()
 
@@ -1055,7 +1249,13 @@ function App() {
         }
 
         setConfig(nextConfig)
-        setHistory(reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig))
+        const nextHistory = reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig)
+        debugLogger.log('app', 'config_loaded', {
+          source: localConfig ? 'local' : 'demo',
+          config: getWheelSummary(nextConfig),
+        })
+        debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
+        setHistory(nextHistory)
         setMode('spin')
         setStatusMessage({
           kind: 'error',
@@ -1067,6 +1267,9 @@ function App() {
 
       if (shareConfig.value) {
         const nextConfig = cloneWheelConfig(shareConfig.value)
+        debugLogger.log('share', 'decode_success', {
+          config: getWheelSummary(nextConfig),
+        })
 
         await saveWheelConfig(nextConfig)
 
@@ -1075,7 +1278,13 @@ function App() {
         }
 
         setConfig(nextConfig)
-        setHistory(reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig))
+        const nextHistory = reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig)
+        debugLogger.log('app', 'config_loaded', {
+          source: 'share',
+          config: getWheelSummary(nextConfig),
+        })
+        debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
+        setHistory(nextHistory)
         setMode('spin')
         setStatusMessage({
           kind: 'success',
@@ -1093,7 +1302,13 @@ function App() {
       }
 
       setConfig(nextConfig)
-      setHistory(reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig))
+      const nextHistory = reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig)
+      debugLogger.log('app', 'config_loaded', {
+        source: localConfig ? 'local' : 'demo',
+        config: getWheelSummary(nextConfig),
+      })
+      debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
+      setHistory(nextHistory)
       setIsConfigLoaded(true)
     }
 
@@ -1118,7 +1333,16 @@ function App() {
 
   function commitConfig(nextConfig: WheelConfig) {
     setConfig(nextConfig)
-    setHistory((currentHistory) => reconcileHistoryForConfig(currentHistory, nextConfig))
+    setHistory((currentHistory) => {
+      const nextHistory = reconcileHistoryForConfig(currentHistory, nextConfig)
+      debugLogger.log('history', 'reconcile', {
+        before: getHistorySummary(currentHistory),
+        after: getHistorySummary(nextHistory),
+        config: getWheelSummary(nextConfig),
+      })
+
+      return nextHistory
+    })
     setStatusMessage(undefined)
   }
 
@@ -1128,9 +1352,11 @@ function App() {
 
   function applyImportedConfig(nextConfig: WheelConfig, message: string) {
     const clonedConfig = cloneWheelConfig(nextConfig)
+    const nextHistory = reconcileHistoryForConfig(loadWheelHistory(clonedConfig.wheel.id), clonedConfig)
 
     setConfig(clonedConfig)
-    setHistory(reconcileHistoryForConfig(loadWheelHistory(clonedConfig.wheel.id), clonedConfig))
+    debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
+    setHistory(nextHistory)
     setMode('spin')
     setStatusMessage({ kind: 'success', text: message })
     void saveWheelConfig(clonedConfig)
@@ -1141,15 +1367,28 @@ function App() {
     const result = parseWheelConfigJson(text)
 
     if (!result.ok) {
+      debugLogger.log('json', 'import_error', {
+        fileName: file.name,
+        fileSize: file.size,
+        error: result.error,
+      })
       setStatusMessage({ kind: 'error', text: result.error })
       return
     }
 
+    debugLogger.log('json', 'import_success', {
+      fileName: file.name,
+      fileSize: file.size,
+      config: getWheelSummary(result.value),
+    })
     applyImportedConfig(result.value, 'JSON импортирован. Открыт режим барабана.')
   }
 
   function handleExportJson() {
     downloadJson(config)
+    debugLogger.log('json', 'export_success', {
+      config: getWheelSummary(config),
+    })
     setStatusMessage({ kind: 'success', text: 'JSON экспортирован.' })
   }
 
@@ -1157,16 +1396,47 @@ function App() {
     const shareUrl = getShareUrl(config)
 
     if (!shareUrl.ok) {
+      debugLogger.log('share', 'create_error', {
+        error: shareUrl.error,
+        config: getWheelSummary(config),
+      })
       setStatusMessage({ kind: 'error', text: shareUrl.error })
       return
     }
 
+    debugLogger.log('share', 'create_success', {
+      shareUrl: shareUrl.value,
+      config: getWheelSummary(config),
+    })
     try {
-      await navigator.clipboard.writeText(shareUrl.value)
+      await copyTextToClipboard(shareUrl.value)
+      debugLogger.log('share', 'copy_success', {
+        shareUrl: shareUrl.value,
+      })
       setStatusMessage({ kind: 'success', text: 'Ссылка скопирована. Картинки в нее не входят.' })
-    } catch {
+    } catch (error) {
+      debugLogger.log('share', 'copy_error', {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
       setStatusMessage({ kind: 'error', text: 'Не удалось скопировать ссылку.' })
     }
+  }
+
+  async function handleCopyDebugLog() {
+    try {
+      await copyTextToClipboard(debugLogger.formatEvents())
+      debugLogger.log('app', 'debug_log_copy_success', {
+        eventCount: debugLogger.getEvents().length,
+      })
+    } catch (error) {
+      debugLogger.log('app', 'debug_log_copy_error', {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
+    }
+  }
+
+  function handleClearDebugLog() {
+    debugLogger.clear()
   }
 
   return (
@@ -1201,6 +1471,15 @@ function App() {
           validationMessages={validationMessages}
         />
       )}
+      {isDebugEnabled ? (
+        <DebugPanel
+          events={debugEvents}
+          onClear={handleClearDebugLog}
+          onCopy={() => {
+            void handleCopyDebugLog()
+          }}
+        />
+      ) : null}
     </main>
   )
 }

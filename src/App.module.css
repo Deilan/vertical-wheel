@@ -379,6 +379,64 @@
   text-align: center;
 }
 
+.debugPanel {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 20;
+  width: min(360px, calc(100vw - 20px));
+  max-height: min(320px, calc(100svh - 20px));
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid rgb(148 163 184 / 36%);
+  border-radius: 8px;
+  background: rgb(15 23 42 / 92%);
+  color: #f8fafc;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 32%);
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.debugPanelHeader {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.debugActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.debugActions button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 14%);
+  color: #f8fafc;
+}
+
+.debugPanel summary {
+  cursor: pointer;
+}
+
+.debugEventList {
+  display: grid;
+  gap: 6px;
+  max-height: 140px;
+  padding-left: 18px;
+  margin: 8px 0 0;
+  overflow: auto;
+}
+
+.debugEventList code {
+  overflow-wrap: anywhere;
+}
+
 .editor {
   width: min(100%, 920px);
   display: grid;
