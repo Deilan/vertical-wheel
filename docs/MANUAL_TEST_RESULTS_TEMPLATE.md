@@ -46,6 +46,15 @@
 | Editor | Валидация обязательного title |  |  |  |
 | Editor | Min 2 / max 30 опций |  |  |  |
 | Settings | Slider и number input синхронизированы |  |  |  |
+| Exclusion | Global keep/exclude/ask |  |  |  |
+| Exclusion | Per-option inherit/keep/exclude/ask |  |  |  |
+| Exclusion | Ask блокирует следующий spin до решения |  |  |  |
+| Exclusion | Hidden excluded опции исчезают из барабана |  |  |  |
+| Exclusion | Visible-disabled excluded опции не становятся результатом |  |  |  |
+| Exclusion | Restore one / restore all |  |  |  |
+| Exclusion | Active count меньше 2 блокирует spin |  |  |  |
+| Exclusion | Share link сбрасывает текущее excluded state |  |  |  |
+| Exclusion | JSON import сбрасывает текущее excluded state |  |  |  |
 | Images | Upload PNG/JPG/JPEG/WebP |  |  |  |
 | Images | Image URL отображается без конвертации |  |  |  |
 | Images | Приоритет image > emoji > placeholder |  |  |  |
@@ -70,7 +79,7 @@
 - Severity: `Critical` / `High` / `Medium` / `Low`
 - Device/browser:
 - Viewport:
-- Suspected area: `spin` / `editor` / `images` / `json` / `share` / `history` / `mobile`
+- Suspected area: `spin` / `editor` / `exclusion` / `images` / `json` / `share` / `history` / `mobile`
 - Steps to reproduce:
 
 ```text

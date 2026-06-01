@@ -17,6 +17,7 @@
 - Stage 2: Spin mode, vertical cyclic wheel UI, pointer gestures, spin physics, snap-to-center, result history UI.
 - Stage 3: Edit mode, WYSIWYG preview, option editing, visual settings, validation, history reconciliation on semantic changes.
 - Stage 4: image upload/compression, image URL, JSON import/export, share link generation/opening.
+- Stage C: option exclusion rules, local session state, Spin mode integration, editor controls and QA documentation.
 
 ## Domain layer
 
@@ -43,6 +44,19 @@
 
 `src/domain/shareConfig.ts` сериализует share config: удаляет картинки, кодирует Unicode-safe JSON, сжимает через `lz-string`, кодирует в base64url и читает `#wheel=...`.
 
+`src/domain/optionExclusion.ts` содержит чистую логику временного исключения опций из будущих вращений:
+
+- effective behavior после результата: `keep`, `exclude`, `ask`;
+- per-option override: `inherit`, `keep`, `exclude`, `ask`;
+- допустимые решения ask: `keep`, `exclude-hide`, `exclude-show-disabled`;
+- active/visible options с режимами `hide` и `show-disabled`;
+- применение решений после результата;
+- восстановление одной или всех исключенных опций;
+- согласование session state с новым конфигом;
+- сдвиг финальной цели, если сырой кандидат указывает на visible-disabled excluded option.
+
+Исключение из вращения не удаляет опцию из `WheelConfig`. Удаление — это отдельное действие редактора, которое убирает опцию из конфига.
+
 ## Storage layer
 
 `src/storage/wheelStorage.ts` использует IndexedDB через `idb`.
@@ -57,6 +71,13 @@
 - Ключ истории привязан к `wheel.id`.
 - Согласование истории с текущим конфигом происходит через fingerprint.
 
+`src/storage/wheelSessionStorage.ts` хранит локальное состояние исключенных опций:
+
+- состояние привязано к fingerprint смысловой части барабана;
+- для каждой исключенной опции хранится `optionId` и display mode;
+- визуальные изменения не должны сбрасывать исключения;
+- share link и JSON import/export не включают текущее session state.
+
 ## Share link flow
 
 1. В Edit mode пользователь нажимает «Скопировать ссылку».
@@ -65,10 +86,13 @@
 4. JSON кодируется через UTF-8, сжимается `lz-string`, превращается в base64url.
 5. В URL кладется hash вида `#wheel=...`.
 6. История не участвует в сериализации.
-7. При открытии страницы `readShareConfigFromHash` декодирует и валидирует конфиг.
-8. Валидный share config сохраняется в IndexedDB как локальный текущий барабан.
-9. Приложение открывает Spin mode.
-10. Если hash невалидный, показывается русская ошибка и используется локальный или demo wheel.
+7. Правила исключения после результата входят в сериализуемый config.
+8. Текущее состояние исключенных опций не сериализуется.
+9. При открытии страницы `readShareConfigFromHash` декодирует и валидирует конфиг.
+10. Валидный share config сохраняется в IndexedDB как локальный текущий барабан.
+11. Состояние исключенных опций очищается, потому что share link переносит правила, но не текущую сессию.
+12. Приложение открывает Spin mode.
+13. Если hash невалидный, показывается русская ошибка и используется локальный или demo wheel.
 
 Если encoded config длиннее 6000 символов, пользователь получает ошибку:
 
@@ -93,7 +117,8 @@ Import:
 4. При ошибке показывается русское сообщение.
 5. При успехе текущий барабан заменяется импортированным.
 6. Импортированный конфиг сохраняется в IndexedDB.
-7. Открывается Spin mode.
+7. Состояние исключенных опций очищается.
+8. Открывается Spin mode.
 
 ## Image handling flow
 
@@ -140,6 +165,10 @@ Spin mode использует Pointer Events. Пока барабан вращ�
 - добавляется jitter до ±0.5 карточки;
 - финальная позиция округляется к центру карточки;
 - после завершения spin результат попадает в историю.
+- если выбранная опция имеет effective behavior `exclude`, она исключается из следующих вращений;
+- если effective behavior `ask`, следующий spin блокируется до выбора решения.
+
+Если исключенная опция видима как disabled и математический кандидат остановки попадает на нее, финальная цель до анимации сдвигается в направлении spin к ближайшей active option. Поэтому visible-disabled опции могут оставаться в ленте, но не становятся результатом.
 
 ## Editor и WYSIWYG
 
@@ -153,10 +182,27 @@ Edit mode работает с единым `WheelConfig` state. Все поля 
 - theme, appBackgroundColor, pointerColor;
 - числовые настройки карточек через slider и number input;
 - upload image, image URL, remove image;
+- global after-result behavior, display mode исключенных опций и ask decisions;
+- per-option after-result override и optional custom ask decisions;
 - JSON import/export;
 - share link copy.
 
 Визуальные изменения не очищают историю. Семантические изменения опций согласуются через fingerprint и могут очищать историю.
+
+## Диагностика option exclusion
+
+В debug mode (`?debug=1`) логируются структурированные события исключения без больших payload:
+
+- `exclusion:option-excluded`;
+- `exclusion:option-restored`;
+- `exclusion:all-restored`;
+- `exclusion:active-count-changed`;
+- `after-result:ask-shown`;
+- `after-result:decision-keep`;
+- `after-result:decision-exclude-hide`;
+- `after-result:decision-exclude-show-disabled`.
+
+Debug logger не должен писать base64-картинки, полный JSON или длинные share-ссылки.
 
 ## Environment notes для WSL + Codex
 

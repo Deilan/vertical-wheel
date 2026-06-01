@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-option-exclusion-rules",
+    "title": "QA исключение из вращения 🎯",
+    "description": "Фикстура для проверки keep/exclude/ask, hidden и visible-disabled.",
+    "settings": {
+      "theme": "dark",
+      "appBackgroundColor": "#111827",
+      "pointerColor": "#22c55e",
+      "cardHeightPx": 112,
+      "cardGapPx": 12,
+      "imageSizePx": 56,
+      "titleFontSizePx": 22,
+      "subtitleFontSizePx": 15,
+      "cardBorderRadiusPx": 18,
+      "afterResultBehavior": "ask",
+      "excludedOptionDisplayMode": "show-disabled",
+      "askAllowedDecisions": ["keep", "exclude-hide", "exclude-show-disabled"]
+    },
+    "options": [
+      {
+        "id": "inherit-ask",
+        "title": "Наследует ask",
+        "subtitle": "должны появиться три решения",
+        "emoji": "❓",
+        "backgroundColor": "#ecfeff",
+        "textColor": "#164e63",
+        "afterResultBehavior": "inherit"
+      },
+      {
+        "id": "always-keep",
+        "title": "Всегда остается",
+        "subtitle": "переопределяет global ask",
+        "emoji": "✅",
+        "backgroundColor": "#f0fdf4",
+        "textColor": "#14532d",
+        "afterResultBehavior": "keep"
+      },
+      {
+        "id": "auto-exclude",
+        "title": "Автоисключение",
+        "subtitle": "исключается с режимом show-disabled",
+        "emoji": "🚫",
+        "backgroundColor": "#fef2f2",
+        "textColor": "#7f1d1d",
+        "afterResultBehavior": "exclude"
+      },
+      {
+        "id": "custom-ask",
+        "title": "Свой ask",
+        "subtitle": "только оставить или скрыть",
+        "emoji": "⚙️",
+        "backgroundColor": "#f5f3ff",
+        "textColor": "#4c1d95",
+        "afterResultBehavior": "ask",
+        "askAllowedDecisions": ["keep", "exclude-hide"]
+      },
+      {
+        "id": "plain-option",
+        "title": "Обычная опция",
+        "subtitle": "для проверки активного счетчика",
+        "emoji": "🎲",
+        "backgroundColor": "#fffbeb",
+        "textColor": "#78350f"
+      }
+    ]
+  }
+}

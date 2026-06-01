@@ -69,6 +69,11 @@ Quality:
   - npm run test:run
   - npm run build
 
+Terminology:
+- "Delete option" means removing an option from WheelConfig in the editor.
+- "Exclude from rotation" means temporarily excluding an existing option from future spin results.
+- Do not use delete/remove wording for exclusion behavior in Russian UI or docs; use "исключить из вращения" and "вернуть в вращение".
+
 ## Environment
 
 This project is developed in WSL.
