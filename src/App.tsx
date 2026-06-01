@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent } from 'react'
+import {
+  getCyclicWheelRepeatCycles,
+  normalizeCyclicWheelPosition,
+} from './domain/cyclicWheel'
 import { demoWheelConfig } from './domain/demoWheel'
 import {
   addHistoryEntry,
@@ -43,8 +47,6 @@ type GestureState = {
   lastTimeMs: number
 }
 
-const repeatCycles = 9
-const centerCycle = Math.floor(repeatCycles / 2)
 const historyDateFormatter = new Intl.DateTimeFormat('ru-RU', {
   day: '2-digit',
   month: '2-digit',
@@ -288,6 +290,11 @@ function WheelView({
   const [wheelHeightPx, setWheelHeightPx] = useState(360)
   const { settings, options } = config.wheel
   const cardStepPx = getCardStepPx(settings)
+  const repeatCycles = getCyclicWheelRepeatCycles(
+    options.length,
+    defaultSpinPhysicsConfig.maxVirtualCardsToTravel,
+  )
+  const centerCycle = Math.floor(repeatCycles / 2)
   const baseOptionIndex = centerCycle * options.length
   const activeOption = options.length > 0 ? getWinningOption(options, positionPx, cardStepPx) : undefined
   const trackTranslatePx =
@@ -302,7 +309,7 @@ function WheelView({
           key: `${cycleIndex}-${option.id}`,
         })),
       ).flat(),
-    [options],
+    [options, repeatCycles],
   )
 
   useEffect(() => {
@@ -386,6 +393,7 @@ function SpinScreen({
   const wheelRef = useRef<HTMLDivElement | null>(null)
   const gestureRef = useRef<GestureState | null>(null)
   const animationTimerRef = useRef<number | undefined>(undefined)
+  const pendingFinalPositionRef = useRef<number | undefined>(undefined)
   const pendingResultRef = useRef<WheelOption | undefined>(undefined)
   const isAnimatingRef = useRef(false)
   const positionRef = useRef(0)
@@ -411,12 +419,21 @@ function SpinScreen({
 
   function finishAnimation() {
     const result = pendingResultRef.current
+    const finalPositionPx = pendingFinalPositionRef.current ?? positionRef.current
+    const normalizedPositionPx = normalizeCyclicWheelPosition(
+      finalPositionPx,
+      cardStepPx,
+      config.wheel.options.length,
+    )
     pendingResultRef.current = undefined
+    pendingFinalPositionRef.current = undefined
     animationTimerRef.current = undefined
     setIsAnimating(false)
     setTransitionMs(0)
+    setPositionPx(normalizedPositionPx)
     debugLogger.log('spin', 'animation_end', {
-      finalPositionPx: positionRef.current,
+      finalPositionPx,
+      normalizedPositionPx,
       hasResult: Boolean(result),
     })
 
@@ -438,6 +455,7 @@ function SpinScreen({
     }
 
     pendingResultRef.current = result
+    pendingFinalPositionRef.current = finalPositionPx
     setIsAnimating(true)
     setTransitionMs(durationMs)
     setPositionPx(finalPositionPx)
@@ -456,15 +474,21 @@ function SpinScreen({
 
     event.currentTarget.setPointerCapture(event.pointerId)
     const timeMs = performance.now()
+    const startPositionPx = normalizeCyclicWheelPosition(
+      positionRef.current,
+      cardStepPx,
+      config.wheel.options.length,
+    )
+    setPositionPx(startPositionPx)
     debugLogger.log('spin', 'pointer_down', {
       pointerType: event.pointerType,
       startY: event.clientY,
-      positionPx: positionRef.current,
+      positionPx: startPositionPx,
     })
     gestureRef.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
-      startPositionPx: positionRef.current,
+      startPositionPx,
       previousY: event.clientY,
       previousTimeMs: timeMs,
       lastY: event.clientY,
@@ -481,7 +505,11 @@ function SpinScreen({
     }
 
     event.preventDefault()
-    const nextPositionPx = gesture.startPositionPx - (event.clientY - gesture.startY)
+    const nextPositionPx = normalizeCyclicWheelPosition(
+      gesture.startPositionPx - (event.clientY - gesture.startY),
+      cardStepPx,
+      config.wheel.options.length,
+    )
     const timeMs = performance.now()
     gesture.previousY = gesture.lastY
     gesture.previousTimeMs = gesture.lastTimeMs
