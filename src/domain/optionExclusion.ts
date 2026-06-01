@@ -7,6 +7,7 @@ import type {
   ValidationResult,
   WheelConfig,
   WheelOption,
+  WheelSettings,
   WheelSessionState,
 } from './types'
 
@@ -64,6 +65,28 @@ export function getEffectiveAskAllowedDecisions(
   optionAllowedDecisions?: AfterResultDecision[],
 ): AfterResultDecision[] {
   return optionAllowedDecisions ?? wheelAllowedDecisions
+}
+
+export function getEffectiveAskDecisionErrors(
+  options: WheelOption[],
+  settings: Pick<WheelSettings, 'afterResultBehavior' | 'askAllowedDecisions'>,
+): Array<{ optionId: string; error: string }> {
+  return options.flatMap((option) => {
+    const behavior = getEffectiveAfterResultBehavior(
+      settings.afterResultBehavior,
+      option.afterResultBehavior,
+    )
+
+    if (behavior !== 'ask') {
+      return []
+    }
+
+    const decisions = validateAskAllowedDecisions(
+      getEffectiveAskAllowedDecisions(settings.askAllowedDecisions, option.askAllowedDecisions),
+    )
+
+    return decisions.ok ? [] : [{ optionId: option.id, error: decisions.error }]
+  })
 }
 
 export function isOptionExcluded(optionId: string, sessionState: WheelSessionState): boolean {
@@ -215,6 +238,47 @@ export function adjustLandingIndexToEligibleOption({
 
     if (!isOptionExcluded(option.id, sessionState)) {
       return { index, option }
+    }
+  }
+
+  return undefined
+}
+
+export function adjustLandingPositionToEligibleOption({
+  options,
+  sessionState,
+  candidatePositionPx,
+  cardStepPx,
+  spinDirection,
+}: {
+  options: WheelOption[]
+  sessionState: WheelSessionState
+  candidatePositionPx: number
+  cardStepPx: number
+  spinDirection: number
+}): { positionPx: number; index: number; option: WheelOption } | undefined {
+  if (cardStepPx <= 0) {
+    throw new Error('Шаг карточки должен быть положительным.')
+  }
+
+  if (options.length === 0 || !canSpinWithActiveOptions(options, sessionState)) {
+    return undefined
+  }
+
+  const direction = spinDirection >= 0 ? 1 : -1
+  const candidateVirtualIndex = Math.round(candidatePositionPx / cardStepPx)
+
+  for (let offset = 0; offset < options.length; offset += 1) {
+    const virtualIndex = candidateVirtualIndex + direction * offset
+    const index = ((virtualIndex % options.length) + options.length) % options.length
+    const option = options[index]
+
+    if (!isOptionExcluded(option.id, sessionState)) {
+      return {
+        positionPx: virtualIndex * cardStepPx,
+        index,
+        option,
+      }
     }
   }
 

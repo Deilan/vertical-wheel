@@ -13,23 +13,47 @@ import {
   reconcileHistoryForConfig,
 } from './domain/history'
 import {
+  adjustLandingPositionToEligibleOption,
+  applyAfterResultDecision,
+  canSpinWithActiveOptions,
+  getActiveOptionCount,
+  getAutomaticAfterResultDecision,
+  getEffectiveAfterResultBehavior,
+  getEffectiveAskDecisionErrors,
+  getEffectiveAskAllowedDecisions,
+  getExcludedOptionDisplayMode,
+  getVisibleOptions,
+  restoreAllExcludedOptions,
+  restoreOptionToRotation,
+  validateAskAllowedDecisions,
+} from './domain/optionExclusion'
+import {
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
 } from './domain/spinPhysics'
 import { createShareHash, readShareConfigFromHash } from './domain/shareConfig'
 import type {
+  AfterResultDecision,
+  ExcludedOptionDisplayMode,
+  OptionAfterResultBehavior,
   WheelConfig,
   WheelHistory,
   WheelOption,
+  WheelSessionState,
   WheelSettings,
 } from './domain/types'
 import { WHEEL_LIMITS, WHEEL_SETTING_LIMITS } from './domain/types'
 import { parseWheelConfigJson } from './domain/validation'
+import { getWheelFingerprint } from './domain/fingerprint'
 import { getWinningOption } from './domain/winningOption'
 import {
   loadWheelHistory,
   saveWheelHistory,
 } from './storage/historyStorage'
+import {
+  loadWheelSessionState,
+  saveWheelSessionState,
+} from './storage/wheelSessionStorage'
 import { loadWheelConfig, saveWheelConfig } from './storage/wheelStorage'
 import { debugLogger } from './utils/debugLogger'
 import { compressImageFile, isSupportedImageFile } from './utils/imageCompression'
@@ -38,6 +62,10 @@ import styles from './App.module.css'
 type AppMode = 'spin' | 'edit'
 type NumberSettingKey = keyof typeof WHEEL_SETTING_LIMITS
 type AppMessage = { kind: 'success' | 'error'; text: string }
+type PendingAfterResultDecision = {
+  option: WheelOption
+  allowedDecisions: AfterResultDecision[]
+}
 type GestureState = {
   pointerId: number
   startY: number
@@ -68,6 +96,45 @@ const numberSettingControls: Array<{
 ]
 const snapTransitionEasing = 'cubic-bezier(0.12, 0.72, 0.12, 1)'
 const spinTransitionEasing = 'cubic-bezier(0.33, 0.33, 0.67, 1)'
+const afterResultBehaviorOptions: Array<{
+  value: WheelSettings['afterResultBehavior']
+  label: string
+}> = [
+  { value: 'keep', label: 'Оставлять в вращении' },
+  { value: 'exclude', label: 'Исключать из вращения' },
+  { value: 'ask', label: 'Спрашивать каждый раз' },
+]
+const optionAfterResultBehaviorOptions: Array<{
+  value: NonNullable<OptionAfterResultBehavior>
+  label: string
+}> = [
+  { value: 'inherit', label: 'Как у барабана' },
+  { value: 'keep', label: 'Всегда оставлять' },
+  { value: 'exclude', label: 'Исключать' },
+  { value: 'ask', label: 'Спрашивать' },
+]
+const excludedDisplayModeOptions: Array<{
+  value: ExcludedOptionDisplayMode
+  label: string
+}> = [
+  { value: 'hide', label: 'Скрывать из барабана' },
+  { value: 'show-disabled', label: 'Показывать недоступными' },
+]
+const afterResultDecisionOptions: Array<{
+  value: AfterResultDecision
+  label: string
+}> = [
+  { value: 'keep', label: 'Оставить' },
+  { value: 'exclude-hide', label: 'Исключить и скрыть' },
+  { value: 'exclude-show-disabled', label: 'Исключить, но показывать недоступной' },
+]
+
+function createWheelSessionState(config: WheelConfig): WheelSessionState {
+  return {
+    wheelFingerprint: getWheelFingerprint(config),
+    excludedOptions: [],
+  }
+}
 
 function cloneWheelConfig(config: WheelConfig): WheelConfig {
   return {
@@ -175,7 +242,15 @@ function createOptionId(): string {
 
 function validateEditableConfig(config: WheelConfig): string[] {
   const messages: string[] = []
-  const { options } = config.wheel
+  const { options, settings } = config.wheel
+
+  if (settings.afterResultBehavior === 'ask') {
+    const decisions = validateAskAllowedDecisions(settings.askAllowedDecisions)
+
+    if (!decisions.ok) {
+      messages.push(decisions.error)
+    }
+  }
 
   if (options.length < WHEEL_LIMITS.minOptions) {
     messages.push(`Нужно минимум ${WHEEL_LIMITS.minOptions} опции.`)
@@ -203,6 +278,12 @@ function validateEditableConfig(config: WheelConfig): string[] {
       messages.push(
         `Опция ${index + 1}: подзаголовок должен быть до ${WHEEL_LIMITS.subtitleMaxLength} символов.`,
       )
+    }
+
+    const effectiveAskError = getEffectiveAskDecisionErrors([option], settings)[0]
+
+    if (effectiveAskError) {
+      messages.push(`Опция ${index + 1}: ${effectiveAskError.error}`)
     }
   }
 
@@ -232,10 +313,12 @@ function WheelCard({
   option,
   settings,
   isActive,
+  isDisabled,
 }: {
   option: WheelOption
   settings: WheelSettings
   isActive: boolean
+  isDisabled: boolean
 }) {
   const image = option.image
 
@@ -243,6 +326,7 @@ function WheelCard({
     <div
       className={styles.card}
       data-active={isActive}
+      data-disabled={isDisabled}
       style={
         {
           '--card-bg': option.backgroundColor,
@@ -278,6 +362,7 @@ function WheelView({
   transitionEasing = snapTransitionEasing,
   isInteractive,
   showActiveHighlight = true,
+  disabledOptionIds = [],
   viewportRef,
   onPointerDown,
   onPointerMove,
@@ -289,6 +374,7 @@ function WheelView({
   transitionEasing?: string
   isInteractive: boolean
   showActiveHighlight?: boolean
+  disabledOptionIds?: string[]
   viewportRef?: React.RefObject<HTMLDivElement | null>
   onPointerDown?: (event: PointerEvent<HTMLDivElement>) => void
   onPointerMove?: (event: PointerEvent<HTMLDivElement>) => void
@@ -296,15 +382,19 @@ function WheelView({
 }) {
   const [wheelHeightPx, setWheelHeightPx] = useState(360)
   const { settings, options } = config.wheel
+  const hasOptions = options.length > 0
+  const disabledOptionIdSet = useMemo(() => new Set(disabledOptionIds), [disabledOptionIds])
   const cardStepPx = getCardStepPx(settings)
-  const repeatCycles = getCyclicWheelRepeatCycles(
-    options.length,
-    defaultSpinPhysicsConfig.maxVirtualCardsToTravel,
-  )
+  const repeatCycles = hasOptions
+    ? getCyclicWheelRepeatCycles(
+        options.length,
+        defaultSpinPhysicsConfig.maxVirtualCardsToTravel,
+      )
+    : 0
   const centerCycle = Math.floor(repeatCycles / 2)
   const baseOptionIndex = centerCycle * options.length
   const activeRepeatedIndex =
-    showActiveHighlight && options.length > 0
+    showActiveHighlight && hasOptions
       ? getPointerAlignedRepeatedIndex(
           positionPx,
           cardStepPx,
@@ -313,9 +403,11 @@ function WheelView({
         )
       : undefined
   const trackTranslatePx =
-    wheelHeightPx / 2 -
-    (baseOptionIndex * cardStepPx + settings.cardHeightPx / 2) -
-    positionPx
+    hasOptions
+      ? wheelHeightPx / 2 -
+        (baseOptionIndex * cardStepPx + settings.cardHeightPx / 2) -
+        positionPx
+      : 0
   const repeatedOptions = useMemo(
     () =>
       Array.from({ length: repeatCycles }, (_, cycleIndex) =>
@@ -364,25 +456,30 @@ function WheelView({
             : 'Превью барабана'
         }
       >
-        <div
-          className={styles.wheelTrack}
-          style={
-            {
-              '--track-y': `${trackTranslatePx}px`,
-              '--transition-ms': `${transitionMs}ms`,
-              '--transition-easing': transitionEasing,
-            } as CSSProperties
-          }
-        >
-          {repeatedOptions.map(({ option, key, repeatedIndex }) => (
-            <WheelCard
-              isActive={repeatedIndex === activeRepeatedIndex}
-              key={key}
-              option={option}
-              settings={settings}
-            />
-          ))}
-        </div>
+        {hasOptions ? (
+          <div
+            className={styles.wheelTrack}
+            style={
+              {
+                '--track-y': `${trackTranslatePx}px`,
+                '--transition-ms': `${transitionMs}ms`,
+                '--transition-easing': transitionEasing,
+              } as CSSProperties
+            }
+          >
+            {repeatedOptions.map(({ option, key, repeatedIndex }) => (
+              <WheelCard
+                isActive={repeatedIndex === activeRepeatedIndex && !disabledOptionIdSet.has(option.id)}
+                isDisabled={disabledOptionIdSet.has(option.id)}
+                key={key}
+                option={option}
+                settings={settings}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className={styles.emptyWheel}>Нет видимых опций.</div>
+        )}
       </div>
     </div>
   )
@@ -391,16 +488,24 @@ function WheelView({
 function SpinScreen({
   config,
   history,
+  sessionState,
+  pendingDecision,
   statusMessage,
   validationMessages,
   onHistoryChange,
+  onSessionChange,
+  onPendingDecisionChange,
   onEdit,
 }: {
   config: WheelConfig
   history: WheelHistory
+  sessionState: WheelSessionState
+  pendingDecision?: PendingAfterResultDecision
   statusMessage?: AppMessage
   validationMessages: string[]
   onHistoryChange: (history: WheelHistory) => void
+  onSessionChange: (sessionState: WheelSessionState) => void
+  onPendingDecisionChange: (decision: PendingAfterResultDecision | undefined) => void
   onEdit: () => void
 }) {
   const [positionPx, setPositionPx] = useState(0)
@@ -416,9 +521,37 @@ function SpinScreen({
   const pendingResultRef = useRef<WheelOption | undefined>(undefined)
   const isAnimatingRef = useRef(false)
   const positionRef = useRef(0)
+  const [resultStatus, setResultStatus] = useState<string | undefined>()
   const lastResult = history.entries[0]
-  const isValid = validationMessages.length === 0
   const cardStepPx = getCardStepPx(config.wheel.settings)
+  const visibleOptions = useMemo(
+    () => getVisibleOptions(config.wheel.options, sessionState),
+    [config.wheel.options, sessionState],
+  )
+  const visibleConfig = useMemo(
+    () => ({
+      ...config,
+      wheel: {
+        ...config.wheel,
+        options: visibleOptions,
+      },
+    }),
+    [config, visibleOptions],
+  )
+  const disabledOptionIds = useMemo(
+    () =>
+      sessionState.excludedOptions
+        .filter((option) => option.displayMode === 'show-disabled')
+        .map((option) => option.optionId),
+    [sessionState.excludedOptions],
+  )
+  const activeOptionCount = getActiveOptionCount(config.wheel.options, sessionState)
+  const excludedOptionCount = sessionState.excludedOptions.length
+  const isValid = validationMessages.length === 0
+  const isSpinAllowed =
+    isValid &&
+    !pendingDecision &&
+    canSpinWithActiveOptions(config.wheel.options, sessionState)
 
   useEffect(() => {
     positionRef.current = positionPx
@@ -442,7 +575,7 @@ function SpinScreen({
     const normalizedPositionPx = normalizeCyclicWheelPosition(
       finalPositionPx,
       cardStepPx,
-      config.wheel.options.length,
+      Math.max(visibleOptions.length, 1),
     )
     pendingResultRef.current = undefined
     pendingFinalPositionRef.current = undefined
@@ -467,6 +600,71 @@ function SpinScreen({
       history: getHistorySummary(nextHistory),
     })
     onHistoryChange(nextHistory)
+
+    const effectiveBehavior = getEffectiveAfterResultBehavior(
+      config.wheel.settings.afterResultBehavior,
+      result.afterResultBehavior,
+    )
+    const automaticDecision = getAutomaticAfterResultDecision(
+      effectiveBehavior,
+      config.wheel.settings.excludedOptionDisplayMode,
+    )
+
+    if (automaticDecision === undefined) {
+      const allowedDecisions = getEffectiveAskAllowedDecisions(
+        config.wheel.settings.askAllowedDecisions,
+        result.askAllowedDecisions,
+      )
+      onPendingDecisionChange({ option: result, allowedDecisions })
+      setResultStatus(undefined)
+      debugLogger.log('after-result', 'ask-shown', {
+        option: getOptionSummary(result),
+        allowedDecisions,
+      })
+      return
+    }
+
+    applyResultDecision(result, automaticDecision)
+  }
+
+  function updateSessionState(nextSessionState: WheelSessionState, eventName: string) {
+    debugLogger.log('exclusion', eventName, {
+      activeCount: getActiveOptionCount(config.wheel.options, nextSessionState),
+      excludedCount: nextSessionState.excludedOptions.length,
+    })
+    debugLogger.log('exclusion', 'active-count-changed', {
+      activeCount: getActiveOptionCount(config.wheel.options, nextSessionState),
+      totalCount: config.wheel.options.length,
+    })
+    onSessionChange(nextSessionState)
+  }
+
+  function applyResultDecision(option: WheelOption, decision: AfterResultDecision) {
+    debugLogger.log('after-result', `decision-${decision}`, {
+      option: getOptionSummary(option),
+    })
+    onPendingDecisionChange(undefined)
+
+    if (decision === 'keep') {
+      setResultStatus('Опция остаётся в следующих вращениях.')
+      return
+    }
+
+    const nextSessionState = applyAfterResultDecision(sessionState, option.id, decision)
+    updateSessionState(nextSessionState, 'option-excluded')
+    setResultStatus('Опция исключена из следующих вращений.')
+  }
+
+  function restoreResultOption(optionId: string) {
+    const nextSessionState = restoreOptionToRotation(sessionState, optionId)
+    updateSessionState(nextSessionState, 'option-restored')
+    setResultStatus('Опция возвращена в вращение.')
+  }
+
+  function restoreAllOptions() {
+    const nextSessionState = restoreAllExcludedOptions(sessionState)
+    updateSessionState(nextSessionState, 'all-restored')
+    setResultStatus('Все исключённые опции возвращены в вращение.')
   }
 
   function animateTo(finalPositionPx: number, durationMs: number, result?: WheelOption) {
@@ -489,7 +687,12 @@ function SpinScreen({
   }
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (isAnimatingRef.current || !isValid) {
+    if (pendingDecision) {
+      setResultStatus('Выберите, что сделать с выпавшей опцией, перед следующим вращением.')
+      return
+    }
+
+    if (isAnimatingRef.current || !isSpinAllowed || visibleOptions.length === 0) {
       return
     }
 
@@ -498,7 +701,7 @@ function SpinScreen({
     const startPositionPx = normalizeCyclicWheelPosition(
       positionRef.current,
       cardStepPx,
-      config.wheel.options.length,
+      visibleOptions.length,
     )
     setPositionPx(startPositionPx)
     debugLogger.log('spin', 'pointer_down', {
@@ -507,6 +710,7 @@ function SpinScreen({
       positionPx: startPositionPx,
     })
     setIsDragging(true)
+    setResultStatus(undefined)
     gestureRef.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
@@ -531,7 +735,7 @@ function SpinScreen({
     const nextPositionPx = normalizeCyclicWheelPosition(
       gesture.startPositionPx - (event.clientY - gesture.startY),
       cardStepPx,
-      config.wheel.options.length,
+      Math.max(visibleOptions.length, 1),
     )
     const timeMs = performance.now()
     gesture.previousY = gesture.lastY
@@ -573,9 +777,21 @@ function SpinScreen({
       cardStepPx,
       jitterCards: getRandomJitterCards(),
     })
+    const spinDirection = releaseVelocityPxPerSec >= 0 ? 1 : -1
+    const adjustedLanding =
+      outcome.kind === 'spin'
+        ? adjustLandingPositionToEligibleOption({
+            options: visibleOptions,
+            sessionState,
+            candidatePositionPx: outcome.finalPositionPx,
+            cardStepPx,
+            spinDirection,
+          })
+        : undefined
+    const finalPositionPx = adjustedLanding?.positionPx ?? outcome.finalPositionPx
     const result =
       outcome.kind === 'spin'
-        ? getWinningOption(config.wheel.options, outcome.finalPositionPx, cardStepPx)
+        ? adjustedLanding?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
         : undefined
 
     debugLogger.log('spin', outcome.kind === 'spin' ? 'valid_spin' : 'weak_gesture', {
@@ -587,11 +803,11 @@ function SpinScreen({
     if (result) {
       debugLogger.log('spin', 'result_selection', {
         result: getOptionSummary(result),
-        finalPositionPx: outcome.finalPositionPx,
+        finalPositionPx,
       })
     }
 
-    animateTo(outcome.finalPositionPx, outcome.durationMs, result)
+    animateTo(finalPositionPx, outcome.durationMs, result)
   }
 
   function handleClearHistory() {
@@ -627,6 +843,24 @@ function SpinScreen({
         </div>
       )}
 
+      <section className={styles.sessionStatus} aria-label="Состояние исключённых опций">
+        <span>Активно: {activeOptionCount} из {config.wheel.options.length}</span>
+        <span>Исключено: {excludedOptionCount}</span>
+        {excludedOptionCount > 0 ? (
+          <button className={styles.inlineButton} type="button" onClick={restoreAllOptions}>
+            Вернуть все исключённые
+          </button>
+        ) : null}
+      </section>
+
+      {activeOptionCount < 2 ? (
+        <div className={styles.validationBox} role="alert">
+          {activeOptionCount === 1
+            ? 'Осталась одна активная опция. Верните исключённые опции.'
+            : 'Нет активных опций. Верните исключённые опции.'}
+        </div>
+      ) : null}
+
       {statusMessage ? (
         <div className={statusMessage.kind === 'error' ? styles.validationBox : styles.statusBox} role="status">
           {statusMessage.text}
@@ -634,8 +868,9 @@ function SpinScreen({
       ) : null}
 
       <WheelView
-        config={config}
-        isInteractive={isValid}
+        config={visibleConfig}
+        disabledOptionIds={disabledOptionIds}
+        isInteractive={isSpinAllowed}
         onPointerDown={handlePointerDown}
         onPointerEnd={endGesture}
         onPointerMove={handlePointerMove}
@@ -650,6 +885,53 @@ function SpinScreen({
         <span className={styles.resultLabel}>Последний результат</span>
         <strong>{lastResult ? lastResult.title : 'Проведите по барабану'}</strong>
         {lastResult?.subtitle ? <small>{lastResult.subtitle}</small> : null}
+        {resultStatus ? <small>{resultStatus}</small> : null}
+        {pendingDecision ? (
+          <div className={styles.resultActions}>
+            {afterResultDecisionOptions
+              .filter((option) => pendingDecision.allowedDecisions.includes(option.value))
+              .map((option) => (
+                <button
+                  className={styles.inlineButton}
+                  key={option.value}
+                  type="button"
+                  onClick={() => applyResultDecision(pendingDecision.option, option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+          </div>
+        ) : lastResult ? (
+          <div className={styles.resultActions}>
+            {getExcludedOptionDisplayMode(lastResult.optionId, sessionState) ? (
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => restoreResultOption(lastResult.optionId)}
+              >
+                Вернуть в вращение
+              </button>
+            ) : (
+              <button
+                className={styles.inlineButton}
+                type="button"
+                onClick={() => {
+                  const nextSessionState = applyAfterResultDecision(
+                    sessionState,
+                    lastResult.optionId,
+                    config.wheel.settings.excludedOptionDisplayMode === 'hide'
+                      ? 'exclude-hide'
+                      : 'exclude-show-disabled',
+                  )
+                  updateSessionState(nextSessionState, 'option-excluded')
+                  setResultStatus('Опция исключена из следующих вращений.')
+                }}
+              >
+                Исключить из следующих вращений
+              </button>
+            )}
+          </div>
+        ) : null}
       </section>
 
       <ResultHistory
@@ -1032,6 +1314,14 @@ function WheelSettingsEditor({
   onChange: (patch: Partial<WheelSettings>) => void
   onNumberChange: (key: NumberSettingKey, value: number) => void
 }) {
+  function toggleWheelDecision(decision: AfterResultDecision, isChecked: boolean) {
+    const nextDecisions = isChecked
+      ? [...settings.askAllowedDecisions, decision]
+      : settings.askAllowedDecisions.filter((item) => item !== decision)
+
+    onChange({ askAllowedDecisions: nextDecisions })
+  }
+
   return (
     <section className={styles.editorSection} aria-labelledby="visual-title">
       <h2 id="visual-title">Внешний вид</h2>
@@ -1063,6 +1353,56 @@ function WheelSettingsEditor({
           />
         </label>
       </div>
+      <div className={styles.behaviorGrid}>
+        <label className={styles.field}>
+          <span>После выпадения</span>
+          <select
+            value={settings.afterResultBehavior}
+            onChange={(event) =>
+              onChange({ afterResultBehavior: event.target.value as WheelSettings['afterResultBehavior'] })
+            }
+          >
+            {afterResultBehaviorOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.field}>
+          <span>Исключённые опции</span>
+          <select
+            value={settings.excludedOptionDisplayMode}
+            onChange={(event) =>
+              onChange({ excludedOptionDisplayMode: event.target.value as ExcludedOptionDisplayMode })
+            }
+          >
+            {excludedDisplayModeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {settings.afterResultBehavior === 'ask' ? (
+        <fieldset className={styles.checkboxGroup}>
+          <legend>Доступные решения</legend>
+          {afterResultDecisionOptions.map((option) => (
+            <label key={option.value}>
+              <input
+                type="checkbox"
+                checked={settings.askAllowedDecisions.includes(option.value)}
+                onChange={(event) => toggleWheelDecision(option.value, event.currentTarget.checked)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+          {settings.askAllowedDecisions.length < 2 ? (
+            <small className={styles.fieldError}>Выберите минимум два решения.</small>
+          ) : null}
+        </fieldset>
+      ) : null}
       <div className={styles.rangeList}>
         {numberSettingControls.map(({ key, label, unit }) => {
           const limit = WHEEL_SETTING_LIMITS[key]
@@ -1123,6 +1463,16 @@ function OptionEditor({
   onDelete: () => void
 }) {
   const isTitleInvalid = option.title.trim().length === 0
+  const usesCustomAskDecisions = option.askAllowedDecisions !== undefined
+  const optionAskDecisions = option.askAllowedDecisions ?? []
+
+  function toggleOptionDecision(decision: AfterResultDecision, isChecked: boolean) {
+    const nextDecisions = isChecked
+      ? [...optionAskDecisions, decision]
+      : optionAskDecisions.filter((item) => item !== decision)
+
+    onUpdate({ askAllowedDecisions: nextDecisions })
+  }
 
   return (
     <article className={styles.optionEditor}>
@@ -1215,6 +1565,63 @@ function OptionEditor({
           </button>
         ) : null}
       </div>
+      <div className={styles.behaviorPanel}>
+        <label className={styles.field}>
+          <span>После выпадения этой опции</span>
+          <select
+            value={option.afterResultBehavior ?? 'inherit'}
+            onChange={(event) =>
+              onUpdate({
+                afterResultBehavior: event.target.value as OptionAfterResultBehavior,
+                askAllowedDecisions:
+                  event.target.value === 'ask' ? option.askAllowedDecisions : undefined,
+              })
+            }
+          >
+            {optionAfterResultBehaviorOptions.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {option.afterResultBehavior === 'ask' ? (
+          <fieldset className={styles.checkboxGroup}>
+            <legend>Решения для этой опции</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={!usesCustomAskDecisions}
+                onChange={(event) =>
+                  onUpdate({
+                    askAllowedDecisions: event.currentTarget.checked
+                      ? undefined
+                      : ['keep', 'exclude-hide'],
+                  })
+                }
+              />
+              <span>Как у барабана</span>
+            </label>
+            {usesCustomAskDecisions ? (
+              <>
+                {afterResultDecisionOptions.map((item) => (
+                  <label key={item.value}>
+                    <input
+                      type="checkbox"
+                      checked={optionAskDecisions.includes(item.value)}
+                      onChange={(event) => toggleOptionDecision(item.value, event.currentTarget.checked)}
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+                {optionAskDecisions.length < 2 ? (
+                  <small className={styles.fieldError}>Выберите минимум два решения.</small>
+                ) : null}
+              </>
+            ) : null}
+          </fieldset>
+        ) : null}
+      </div>
     </article>
   )
 }
@@ -1266,6 +1673,10 @@ function App() {
   )
   const [debugEvents, setDebugEvents] = useState(debugLogger.getEvents())
   const [config, setConfig] = useState<WheelConfig>(() => getInitialWheelConfig())
+  const [sessionState, setSessionState] = useState<WheelSessionState>(() =>
+    createWheelSessionState(demoWheelConfig),
+  )
+  const [pendingDecision, setPendingDecision] = useState<PendingAfterResultDecision | undefined>()
   const [mode, setMode] = useState<AppMode>('spin')
   const [history, setHistory] = useState<WheelHistory>(() =>
     reconcileHistoryForConfig(loadWheelHistory(demoWheelConfig.wheel.id), demoWheelConfig),
@@ -1304,12 +1715,20 @@ function App() {
 
         setConfig(nextConfig)
         const nextHistory = reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig)
+        const nextSessionState =
+          loadWheelSessionState(getWheelFingerprint(nextConfig)) ?? createWheelSessionState(nextConfig)
         debugLogger.log('app', 'config_loaded', {
           source: localConfig ? 'local' : 'demo',
           config: getWheelSummary(nextConfig),
         })
         debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
+        debugLogger.log('exclusion', 'active-count-changed', {
+          activeCount: getActiveOptionCount(nextConfig.wheel.options, nextSessionState),
+          totalCount: nextConfig.wheel.options.length,
+        })
         setHistory(nextHistory)
+        setSessionState(nextSessionState)
+        setPendingDecision(undefined)
         setMode('spin')
         setStatusMessage({
           kind: 'error',
@@ -1332,6 +1751,7 @@ function App() {
         }
 
         setConfig(nextConfig)
+        const nextSessionState = createWheelSessionState(nextConfig)
         const nextHistory = reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig)
         debugLogger.log('app', 'config_loaded', {
           source: 'share',
@@ -1339,6 +1759,8 @@ function App() {
         })
         debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
         setHistory(nextHistory)
+        setSessionState(nextSessionState)
+        setPendingDecision(undefined)
         setMode('spin')
         setStatusMessage({
           kind: 'success',
@@ -1357,12 +1779,16 @@ function App() {
 
       setConfig(nextConfig)
       const nextHistory = reconcileHistoryForConfig(loadWheelHistory(nextConfig.wheel.id), nextConfig)
+      const nextSessionState =
+        loadWheelSessionState(getWheelFingerprint(nextConfig)) ?? createWheelSessionState(nextConfig)
       debugLogger.log('app', 'config_loaded', {
         source: localConfig ? 'local' : 'demo',
         config: getWheelSummary(nextConfig),
       })
       debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
       setHistory(nextHistory)
+      setSessionState(nextSessionState)
+      setPendingDecision(undefined)
       setIsConfigLoaded(true)
     }
 
@@ -1385,6 +1811,14 @@ function App() {
     saveWheelHistory(history)
   }, [history])
 
+  useEffect(() => {
+    if (!isConfigLoaded) {
+      return
+    }
+
+    saveWheelSessionState(sessionState)
+  }, [sessionState, isConfigLoaded])
+
   function commitConfig(nextConfig: WheelConfig) {
     setConfig(nextConfig)
     setHistory((currentHistory) => {
@@ -1397,6 +1831,29 @@ function App() {
 
       return nextHistory
     })
+    setSessionState((currentSessionState) => {
+      const nextSessionState = {
+        wheelFingerprint: getWheelFingerprint(nextConfig),
+        excludedOptions:
+          currentSessionState.wheelFingerprint === getWheelFingerprint(nextConfig)
+            ? currentSessionState.excludedOptions.filter((excludedOption) =>
+                nextConfig.wheel.options.some((option) => option.id === excludedOption.optionId),
+              )
+            : [],
+      }
+      debugLogger.log('exclusion', 'active-count-changed', {
+        activeCount: getActiveOptionCount(nextConfig.wheel.options, nextSessionState),
+        totalCount: nextConfig.wheel.options.length,
+      })
+
+      return nextSessionState
+    })
+    setPendingDecision((currentDecision) =>
+      currentDecision &&
+      nextConfig.wheel.options.some((option) => option.id === currentDecision.option.id)
+        ? currentDecision
+        : undefined,
+    )
     setStatusMessage(undefined)
   }
 
@@ -1404,13 +1861,20 @@ function App() {
     setHistory(nextHistory)
   }
 
+  function handleSessionChange(nextSessionState: WheelSessionState) {
+    setSessionState(nextSessionState)
+  }
+
   function applyImportedConfig(nextConfig: WheelConfig, message: string) {
     const clonedConfig = cloneWheelConfig(nextConfig)
     const nextHistory = reconcileHistoryForConfig(loadWheelHistory(clonedConfig.wheel.id), clonedConfig)
+    const nextSessionState = createWheelSessionState(clonedConfig)
 
     setConfig(clonedConfig)
     debugLogger.log('history', 'reconcile', getHistorySummary(nextHistory))
     setHistory(nextHistory)
+    setSessionState(nextSessionState)
+    setPendingDecision(undefined)
     setMode('spin')
     setStatusMessage({ kind: 'success', text: message })
     void saveWheelConfig(clonedConfig)
@@ -1505,6 +1969,10 @@ function App() {
           history={history}
           onEdit={() => setMode('edit')}
           onHistoryChange={handleHistoryChange}
+          onPendingDecisionChange={setPendingDecision}
+          onSessionChange={handleSessionChange}
+          pendingDecision={pendingDecision}
+          sessionState={sessionState}
           statusMessage={statusMessage}
           validationMessages={validationMessages}
         />

@@ -6,6 +6,8 @@ export type DebugCategory =
   | 'editor'
   | 'json'
   | 'image'
+  | 'exclusion'
+  | 'after-result'
 
 export type DebugPayload = Record<string, unknown>
 

@@ -3,6 +3,7 @@ import { demoWheelConfig } from './demoWheel'
 import { getWheelFingerprint } from './fingerprint'
 import {
   adjustLandingIndexToEligibleOption,
+  adjustLandingPositionToEligibleOption,
   applyAfterResultDecision,
   canSpinWithActiveOptions,
   excludeOptionFromRotation,
@@ -10,6 +11,7 @@ import {
   getActiveOptions,
   getAutomaticAfterResultDecision,
   getEffectiveAfterResultBehavior,
+  getEffectiveAskDecisionErrors,
   getEffectiveAskAllowedDecisions,
   getExcludedOptionDisplayMode,
   getVisibleOptions,
@@ -56,6 +58,29 @@ describe('option exclusion domain logic', () => {
     expect(valid).toEqual({ ok: true, value: ['keep', 'exclude-hide'] })
     expect(invalidDecision.ok).toBe(false)
     expect(tooFew.ok).toBe(false)
+  })
+
+  it('reports inherited ask decision errors for option ask overrides', () => {
+    const errors = getEffectiveAskDecisionErrors(
+      [
+        {
+          ...demoWheelConfig.wheel.options[0],
+          afterResultBehavior: 'ask',
+        },
+        demoWheelConfig.wheel.options[1],
+      ],
+      {
+        afterResultBehavior: 'keep',
+        askAllowedDecisions: ['keep'],
+      },
+    )
+
+    expect(errors).toEqual([
+      {
+        optionId: demoWheelConfig.wheel.options[0].id,
+        error: 'Для режима вопроса нужны хотя бы два допустимых решения.',
+      },
+    ])
   })
 
   it('excludes, restores, and restores all options', () => {
@@ -166,6 +191,26 @@ describe('option exclusion domain logic', () => {
         spinDirection: 1,
       }),
     ).toBeUndefined()
+  })
+
+  it('adjusts snapped landing position to an eligible option in spin direction', () => {
+    const options = demoWheelConfig.wheel.options
+    const cardStepPx = 100
+    const state = createSession([
+      { optionId: options[1].id, displayMode: 'show-disabled' },
+      { optionId: options[2].id, displayMode: 'show-disabled' },
+    ])
+    const adjusted = adjustLandingPositionToEligibleOption({
+      options,
+      sessionState: state,
+      candidatePositionPx: 100,
+      cardStepPx,
+      spinDirection: 1,
+    })
+
+    expect(adjusted?.index).toBe(3)
+    expect(adjusted?.positionPx).toBe(300)
+    expect(adjusted?.option.id).toBe(options[3].id)
   })
 
   it('reconciles excluded session state for config fingerprint and option ids', () => {

@@ -202,6 +202,20 @@
   transform: scale(1);
 }
 
+.card[data-disabled='true'] {
+  filter: grayscale(0.55);
+  opacity: 0.38;
+}
+
+.card[data-disabled='true']::after {
+  content: 'Исключена';
+  justify-self: end;
+  grid-column: 2;
+  color: color-mix(in srgb, var(--card-text) 72%, transparent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .media {
   display: grid;
   place-items: center;
@@ -280,6 +294,42 @@
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resultActions,
+.sessionStatus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.sessionStatus {
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--muted-text);
+  font-size: 13px;
+}
+
+.inlineButton {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--control-text);
+}
+
+.emptyWheel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted-text);
+  font-size: 14px;
+  text-align: center;
 }
 
 .history {
@@ -560,22 +610,53 @@
 }
 
 .colorGrid,
+.behaviorGrid,
 .optionInlineFields {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.colorGrid {
+.colorGrid,
+.behaviorGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .rangeList,
 .optionEditors,
 .exchangeActions,
-.imageControls {
+.imageControls,
+.behaviorPanel,
+.checkboxGroup {
   display: grid;
   gap: 10px;
+}
+
+.checkboxGroup {
+  padding: 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+}
+
+.checkboxGroup legend {
+  padding: 0 4px;
+  color: var(--page-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.checkboxGroup label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: var(--page-text);
+  font-size: 14px;
+}
+
+.checkboxGroup input {
+  width: 18px;
+  height: 18px;
 }
 
 .exchangeActions {
