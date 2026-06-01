@@ -1,73 +1,83 @@
-# React + TypeScript + Vite
+# Вертикальный барабан
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Клиентское веб-приложение для выбора случайного результата через вертикальный циклический барабан. Пользователь может крутить барабан жестом, редактировать набор опций, добавлять изображения, сохранять историю выпадений, импортировать/экспортировать JSON-конфиг и делиться барабаном через ссылку.
 
-Currently, two official plugins are available:
+Приложение полностью client-only: backend, серверные API и авторизация не используются.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Возможности
 
-## React Compiler
+- Spin mode с вертикальной лентой карточек и фиксированным указателем.
+- Управление через Pointer Events: drag/swipe мышью или пальцем.
+- Физика слабого жеста и валидного вращения с финальным snap к центру карточки.
+- История последних 10 результатов с датой и временем.
+- Очистка истории.
+- Edit mode с WYSIWYG-превью.
+- Редактирование названия и описания барабана.
+- Добавление, удаление и переупорядочивание опций.
+- Редактирование title, subtitle, emoji, backgroundColor и textColor опций.
+- Настройка темы, фона, цвета указателя и размеров карточек через синхронные slider + number input.
+- Загрузка локальных картинок с автоматическим сжатием.
+- Image URL без скачивания и конвертации.
+- JSON export полного versioned `WheelConfig`, включая картинки.
+- JSON import с валидацией.
+- Share link `#wheel=...` без картинок и истории.
+- Unicode-safe сериализация для кириллицы и emoji.
+- Локальное хранение текущего барабана в IndexedDB.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Стек
 
-## Expanding the ESLint configuration
+- React
+- TypeScript
+- Vite
+- CSS Modules
+- Vitest
+- `idb` для IndexedDB
+- `lz-string` для сжатия share-конфига
+- Современные browser APIs: Pointer Events, Clipboard, Canvas, FileReader, IndexedDB
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Локальный запуск
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+После запуска откройте локальный URL, который покажет Vite, обычно `http://localhost:5173/`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Проверки
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run lint
+npm run typecheck
+npm run test:run
 ```
+
+## Сборка
+
+```bash
+npm run build
+```
+
+Сборка создает static SPA в `dist/`.
+
+## Ручное тестирование
+
+Практический чеклист ручной проверки находится в [docs/MANUAL_TEST_PLAN.md](docs/MANUAL_TEST_PLAN.md).
+
+## Ограничения проекта
+
+- Приложение не имеет backend и не синхронизирует данные между устройствами.
+- Share link не передает картинки: ни data URL, ни image URL.
+- История не входит в share link.
+- Image URL хранится как строка и не скачивается приложением.
+- Копирование share link зависит от поддержки Clipboard API браузером.
+- Сжатие локальных изображений зависит от Canvas API и поддержки WebP в браузере; при отсутствии WebP используется JPEG.
+- UI/e2e тесты не добавлены; покрыты pure-функции и вспомогательная логика.
+
+## Что не добавлять без явного решения
+
+- Backend или серверные API.
+- Routing.
+- Redux или Zustand.
+- Tailwind.
+- UI kit/design system.
