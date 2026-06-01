@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-long-text",
+    "title": "Длинные подписи и emoji 🧪",
+    "description": "Проверка длинного текста в пределах лимитов конфигурации.",
+    "settings": {
+      "theme": "light",
+      "appBackgroundColor": "#f8fafc",
+      "pointerColor": "#2563eb",
+      "cardHeightPx": 140,
+      "cardGapPx": 14,
+      "imageSizePx": 64,
+      "titleFontSizePx": 20,
+      "subtitleFontSizePx": 14,
+      "cardBorderRadiusPx": 20
+    },
+    "options": [
+      {
+        "id": "long-one",
+        "title": "Очень длинное название опции для проверки карточки",
+        "subtitle": "Длинный подзаголовок с кириллицей, emoji ✨ и обычным текстом для проверки переносов и обрезки.",
+        "emoji": "🧪",
+        "backgroundColor": "#ffffff",
+        "textColor": "#111827"
+      },
+      {
+        "id": "long-two",
+        "title": "Смешанный English Русский emoji 🚀 текст",
+        "subtitle": "Subtitle mixes English, русский текст, numbers 12345 and emoji 🚀🎯 without exceeding validation limits.",
+        "emoji": "🚀",
+        "backgroundColor": "#fef3c7",
+        "textColor": "#78350f"
+      },
+      {
+        "id": "long-three",
+        "title": "Короткий title с очень подробным subtitle",
+        "subtitle": "Этот вариант нужен, чтобы проверить как приложение отображает длинное описание внутри карточки барабана.",
+        "emoji": "📝",
+        "backgroundColor": "#dcfce7",
+        "textColor": "#14532d"
+      }
+    ]
+  }
+}

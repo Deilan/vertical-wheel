@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-simple-russian-emoji",
+    "title": "QA выбор на вечер ✨",
+    "description": "Простой барабан с кириллицей и emoji.",
+    "settings": {
+      "theme": "dark",
+      "appBackgroundColor": "#111827",
+      "pointerColor": "#f97316",
+      "cardHeightPx": 112,
+      "cardGapPx": 12,
+      "imageSizePx": 56,
+      "titleFontSizePx": 22,
+      "subtitleFontSizePx": 15,
+      "cardBorderRadiusPx": 18
+    },
+    "options": [
+      {
+        "id": "tea",
+        "title": "Чай 🍵",
+        "subtitle": "с лимоном и медом",
+        "emoji": "🍵",
+        "backgroundColor": "#ecfdf5",
+        "textColor": "#064e3b"
+      },
+      {
+        "id": "book",
+        "title": "Книга 📚",
+        "subtitle": "прочитать одну главу",
+        "emoji": "📚",
+        "backgroundColor": "#eef2ff",
+        "textColor": "#312e81"
+      },
+      {
+        "id": "music",
+        "title": "Музыка 🎧",
+        "subtitle": "включить любимый плейлист",
+        "emoji": "🎧",
+        "backgroundColor": "#fdf2f8",
+        "textColor": "#831843"
+      }
+    ]
+  }
+}

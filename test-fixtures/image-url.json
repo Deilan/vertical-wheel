@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-image-url",
+    "title": "Image URL 🖼",
+    "description": "Одна опция использует URL картинки без base64.",
+    "settings": {
+      "theme": "dark",
+      "appBackgroundColor": "#111827",
+      "pointerColor": "#38bdf8",
+      "cardHeightPx": 128,
+      "cardGapPx": 12,
+      "imageSizePx": 72,
+      "titleFontSizePx": 22,
+      "subtitleFontSizePx": 15,
+      "cardBorderRadiusPx": 18
+    },
+    "options": [
+      {
+        "id": "remote-image",
+        "title": "Картинка по URL",
+        "subtitle": "должна отображаться как image",
+        "emoji": "🖼",
+        "image": {
+          "kind": "url",
+          "value": "https://placehold.co/256x256/webp?text=QA"
+        },
+        "backgroundColor": "#e0f2fe",
+        "textColor": "#075985"
+      },
+      {
+        "id": "emoji-fallback",
+        "title": "Emoji fallback",
+        "subtitle": "без image должна быть emoji",
+        "emoji": "🙂",
+        "backgroundColor": "#fef3c7",
+        "textColor": "#78350f"
+      },
+      {
+        "id": "placeholder-fallback",
+        "title": "Placeholder fallback",
+        "subtitle": "без image и emoji должен быть placeholder",
+        "backgroundColor": "#f8fafc",
+        "textColor": "#111827"
+      }
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-max-30-options",
+    "title": "Максимум 30 опций 🎲",
+    "description": "Валидный конфиг с максимально допустимым количеством опций.",
+    "settings": {
+      "theme": "dark",
+      "appBackgroundColor": "#0f172a",
+      "pointerColor": "#22c55e",
+      "cardHeightPx": 104,
+      "cardGapPx": 8,
+      "imageSizePx": 48,
+      "titleFontSizePx": 18,
+      "subtitleFontSizePx": 12,
+      "cardBorderRadiusPx": 12
+    },
+    "options": [
+      { "id": "option-01", "title": "Опция 01", "subtitle": "номер 01", "emoji": "✨", "backgroundColor": "#f8fafc", "textColor": "#111827" },
+      { "id": "option-02", "title": "Опция 02", "subtitle": "номер 02", "emoji": "🎯", "backgroundColor": "#fef2f2", "textColor": "#7f1d1d" },
+      { "id": "option-03", "title": "Опция 03", "subtitle": "номер 03", "emoji": "🍀", "backgroundColor": "#ecfdf5", "textColor": "#064e3b" },
+      { "id": "option-04", "title": "Опция 04", "subtitle": "номер 04", "emoji": "🌙", "backgroundColor": "#eef2ff", "textColor": "#312e81" },
+      { "id": "option-05", "title": "Опция 05", "subtitle": "номер 05", "emoji": "🔥", "backgroundColor": "#fff7ed", "textColor": "#7c2d12" },
+      { "id": "option-06", "title": "Опция 06", "subtitle": "номер 06", "emoji": "🎲", "backgroundColor": "#fdf2f8", "textColor": "#831843" },
+      { "id": "option-07", "title": "Опция 07", "subtitle": "номер 07", "emoji": "⭐", "backgroundColor": "#fefce8", "textColor": "#713f12" },
+      { "id": "option-08", "title": "Опция 08", "subtitle": "номер 08", "emoji": "🎧", "backgroundColor": "#eff6ff", "textColor": "#1e3a8a" },
+      { "id": "option-09", "title": "Опция 09", "subtitle": "номер 09", "emoji": "🍵", "backgroundColor": "#f0fdf4", "textColor": "#14532d" },
+      { "id": "option-10", "title": "Опция 10", "subtitle": "номер 10", "emoji": "📚", "backgroundColor": "#faf5ff", "textColor": "#581c87" },
+      { "id": "option-11", "title": "Опция 11", "subtitle": "номер 11", "emoji": "🧩", "backgroundColor": "#f1f5f9", "textColor": "#0f172a" },
+      { "id": "option-12", "title": "Опция 12", "subtitle": "номер 12", "emoji": "🎨", "backgroundColor": "#fff1f2", "textColor": "#881337" },
+      { "id": "option-13", "title": "Опция 13", "subtitle": "номер 13", "emoji": "🧭", "backgroundColor": "#ecfeff", "textColor": "#164e63" },
+      { "id": "option-14", "title": "Опция 14", "subtitle": "номер 14", "emoji": "☕", "backgroundColor": "#fffbeb", "textColor": "#78350f" },
+      { "id": "option-15", "title": "Опция 15", "subtitle": "номер 15", "emoji": "🎬", "backgroundColor": "#f5f3ff", "textColor": "#4c1d95" },
+      { "id": "option-16", "title": "Опция 16", "subtitle": "номер 16", "emoji": "🛠", "backgroundColor": "#f7fee7", "textColor": "#365314" },
+      { "id": "option-17", "title": "Опция 17", "subtitle": "номер 17", "emoji": "💡", "backgroundColor": "#fef9c3", "textColor": "#713f12" },
+      { "id": "option-18", "title": "Опция 18", "subtitle": "номер 18", "emoji": "🌊", "backgroundColor": "#e0f2fe", "textColor": "#075985" },
+      { "id": "option-19", "title": "Опция 19", "subtitle": "номер 19", "emoji": "🥗", "backgroundColor": "#dcfce7", "textColor": "#166534" },
+      { "id": "option-20", "title": "Опция 20", "subtitle": "номер 20", "emoji": "🏁", "backgroundColor": "#fee2e2", "textColor": "#991b1b" },
+      { "id": "option-21", "title": "Опция 21", "subtitle": "номер 21", "emoji": "🧠", "backgroundColor": "#ede9fe", "textColor": "#5b21b6" },
+      { "id": "option-22", "title": "Опция 22", "subtitle": "номер 22", "emoji": "🧘", "backgroundColor": "#ccfbf1", "textColor": "#115e59" },
+      { "id": "option-23", "title": "Опция 23", "subtitle": "номер 23", "emoji": "🍕", "backgroundColor": "#fed7aa", "textColor": "#9a3412" },
+      { "id": "option-24", "title": "Опция 24", "subtitle": "номер 24", "emoji": "📌", "backgroundColor": "#e2e8f0", "textColor": "#334155" },
+      { "id": "option-25", "title": "Опция 25", "subtitle": "номер 25", "emoji": "🔔", "backgroundColor": "#fae8ff", "textColor": "#86198f" },
+      { "id": "option-26", "title": "Опция 26", "subtitle": "номер 26", "emoji": "🎁", "backgroundColor": "#ffe4e6", "textColor": "#9f1239" },
+      { "id": "option-27", "title": "Опция 27", "subtitle": "номер 27", "emoji": "🗺", "backgroundColor": "#dbeafe", "textColor": "#1d4ed8" },
+      { "id": "option-28", "title": "Опция 28", "subtitle": "номер 28", "emoji": "🍋", "backgroundColor": "#fef08a", "textColor": "#854d0e" },
+      { "id": "option-29", "title": "Опция 29", "subtitle": "номер 29", "emoji": "🪄", "backgroundColor": "#e9d5ff", "textColor": "#6b21a8" },
+      { "id": "option-30", "title": "Опция 30", "subtitle": "номер 30", "emoji": "✅", "backgroundColor": "#bbf7d0", "textColor": "#166534" }
+    ]
+  }
+}

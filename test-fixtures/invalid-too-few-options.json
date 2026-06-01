@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-invalid-too-few-options",
+    "title": "Невалидно: одна опция",
+    "description": "Этот файл должен быть отклонен валидатором.",
+    "settings": {
+      "theme": "dark",
+      "appBackgroundColor": "#111827",
+      "pointerColor": "#f97316",
+      "cardHeightPx": 112,
+      "cardGapPx": 12,
+      "imageSizePx": 56,
+      "titleFontSizePx": 22,
+      "subtitleFontSizePx": 15,
+      "cardBorderRadiusPx": 18
+    },
+    "options": [
+      {
+        "id": "only-option",
+        "title": "Одна опция ❌",
+        "subtitle": "минимум должен быть 2",
+        "emoji": "❌",
+        "backgroundColor": "#fee2e2",
+        "textColor": "#7f1d1d"
+      }
+    ]
+  }
+}

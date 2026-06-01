@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-invalid-duplicate-ids",
+    "title": "Невалидно: повтор id",
+    "description": "Этот файл должен быть отклонен из-за повторяющихся id опций.",
+    "settings": {
+      "theme": "light",
+      "appBackgroundColor": "#f8fafc",
+      "pointerColor": "#f97316",
+      "cardHeightPx": 112,
+      "cardGapPx": 12,
+      "imageSizePx": 56,
+      "titleFontSizePx": 22,
+      "subtitleFontSizePx": 15,
+      "cardBorderRadiusPx": 18
+    },
+    "options": [
+      {
+        "id": "duplicate",
+        "title": "Первая опция",
+        "subtitle": "id duplicate",
+        "emoji": "1️⃣",
+        "backgroundColor": "#dcfce7",
+        "textColor": "#14532d"
+      },
+      {
+        "id": "duplicate",
+        "title": "Вторая опция",
+        "subtitle": "тот же id duplicate",
+        "emoji": "2️⃣",
+        "backgroundColor": "#dbeafe",
+        "textColor": "#1e3a8a"
+      }
+    ]
+  }
+}

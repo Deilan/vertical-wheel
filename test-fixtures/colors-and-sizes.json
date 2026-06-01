@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "wheel": {
+    "id": "qa-colors-and-sizes",
+    "title": "Цвета и размеры 🎨",
+    "description": "Настройки находятся на краях разрешенных диапазонов.",
+    "settings": {
+      "theme": "light",
+      "appBackgroundColor": "#ffffff",
+      "pointerColor": "#dc2626",
+      "cardHeightPx": 220,
+      "cardGapPx": 32,
+      "imageSizePx": 120,
+      "titleFontSizePx": 36,
+      "subtitleFontSizePx": 24,
+      "cardBorderRadiusPx": 32
+    },
+    "options": [
+      {
+        "id": "large-red",
+        "title": "Большая красная",
+        "subtitle": "максимальные размеры карточки",
+        "emoji": "🔴",
+        "backgroundColor": "#fee2e2",
+        "textColor": "#7f1d1d"
+      },
+      {
+        "id": "large-blue",
+        "title": "Большая синяя",
+        "subtitle": "проверка светлой темы",
+        "emoji": "🔵",
+        "backgroundColor": "#dbeafe",
+        "textColor": "#1e3a8a"
+      },
+      {
+        "id": "large-green",
+        "title": "Большая зеленая",
+        "subtitle": "визуальный edge case",
+        "emoji": "🟢",
+        "backgroundColor": "#dcfce7",
+        "textColor": "#14532d"
+      }
+    ]
+  }
+}
