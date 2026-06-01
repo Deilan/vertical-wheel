@@ -95,7 +95,7 @@ const numberSettingControls: Array<{
   { key: 'cardBorderRadiusPx', label: 'Скругление карточки', unit: 'px' },
 ]
 const snapTransitionEasing = 'cubic-bezier(0.12, 0.72, 0.12, 1)'
-const spinTransitionEasing = 'cubic-bezier(0.33, 0.33, 0.67, 1)'
+const spinTransitionEasing = 'cubic-bezier(0.25, 0.5, 0.35, 1)'
 const afterResultBehaviorOptions: Array<{
   value: WheelSettings['afterResultBehavior']
   label: string
@@ -686,6 +686,51 @@ function SpinScreen({
     animationTimerRef.current = window.setTimeout(finishAnimation, durationMs + 40)
   }
 
+  function animateSpinTo({
+    inertialPositionPx,
+    finalPositionPx,
+    inertialDurationMs,
+    snapDurationMs,
+    result,
+  }: {
+    inertialPositionPx: number
+    finalPositionPx: number
+    inertialDurationMs: number
+    snapDurationMs: number
+    result: WheelOption
+  }) {
+    if (animationTimerRef.current !== undefined) {
+      window.clearTimeout(animationTimerRef.current)
+    }
+
+    pendingResultRef.current = result
+    pendingFinalPositionRef.current = finalPositionPx
+    setIsAnimating(true)
+    setTransitionMs(inertialDurationMs)
+    setTransitionEasing(spinTransitionEasing)
+    setPositionPx(inertialPositionPx)
+    debugLogger.log('spin', 'animation_start', {
+      inertialPositionPx,
+      finalPositionPx,
+      inertialDurationMs,
+      snapDurationMs,
+      hasResult: true,
+    })
+    animationTimerRef.current = window.setTimeout(() => {
+      setTransitionMs(snapDurationMs)
+      setTransitionEasing(snapTransitionEasing)
+      setPositionPx(finalPositionPx)
+      debugLogger.log('spin', 'final_snap_start', {
+        inertialPositionPx,
+        finalPositionPx,
+        snapDistancePx: finalPositionPx - inertialPositionPx,
+        snapDurationMs,
+        result: getOptionSummary(result),
+      })
+      animationTimerRef.current = window.setTimeout(finishAnimation, snapDurationMs + 40)
+    }, inertialDurationMs + 40)
+  }
+
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (pendingDecision) {
       setResultStatus('Выберите, что сделать с выпавшей опцией, перед следующим вращением.')
@@ -789,6 +834,25 @@ function SpinScreen({
           })
         : undefined
     const finalPositionPx = adjustedLanding?.positionPx ?? outcome.finalPositionPx
+    const inertialPositionPx =
+      outcome.kind === 'spin'
+        ? outcome.inertialPositionPx + finalPositionPx - outcome.finalPositionPx
+        : outcome.finalPositionPx
+    const finalSnapDistancePx =
+      outcome.kind === 'spin'
+        ? finalPositionPx - inertialPositionPx
+        : outcome.finalPositionPx - positionRef.current
+    const snapDurationMs =
+      outcome.kind === 'spin'
+        ? Math.round(
+            clampNumber(
+              (Math.abs(finalSnapDistancePx) / cardStepPx) *
+                defaultSpinPhysicsConfig.finalSnapDurationMs,
+              120,
+              defaultSpinPhysicsConfig.finalSnapDurationMs,
+            ),
+          )
+        : outcome.durationMs
     const result =
       outcome.kind === 'spin'
         ? adjustedLanding?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
@@ -798,6 +862,9 @@ function SpinScreen({
       outcome,
       dragDistancePx,
       releaseVelocityPxPerSec,
+      projectedTravelPx: outcome.kind === 'spin' ? outcome.projectedTravelPx : undefined,
+      decelerationDurationMs: outcome.kind === 'spin' ? outcome.inertialDurationMs : undefined,
+      finalSnapDistancePx,
     })
 
     if (result) {
@@ -805,6 +872,17 @@ function SpinScreen({
         result: getOptionSummary(result),
         finalPositionPx,
       })
+    }
+
+    if (outcome.kind === 'spin' && result) {
+      animateSpinTo({
+        inertialPositionPx,
+        finalPositionPx,
+        inertialDurationMs: outcome.inertialDurationMs,
+        snapDurationMs,
+        result,
+      })
+      return
     }
 
     animateTo(finalPositionPx, outcome.durationMs, result)

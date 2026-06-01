@@ -3,6 +3,7 @@ import {
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
   isValidSpinGesture,
+  projectInertialTravelPx,
   snapPositionToCard,
 } from './spinPhysics'
 
@@ -57,6 +58,23 @@ describe('spin physics', () => {
     expect(result.finalPositionPx % 124).toBe(0)
   })
 
+  it('projects inertial travel from measured release velocity', () => {
+    const slow = projectInertialTravelPx(600, 100)
+    const fast = projectInertialTravelPx(1200, 100)
+
+    expect(fast.travelPx).toBeGreaterThan(slow.travelPx)
+    expect(fast.durationMs).toBeGreaterThan(slow.durationMs)
+    expect(slow.clampedReleaseVelocityPxPerSec).toBe(600)
+    expect(fast.clampedReleaseVelocityPxPerSec).toBe(1200)
+  })
+
+  it('keeps inertial duration consistent with release velocity', () => {
+    const projected = projectInertialTravelPx(900, 100)
+    const initialCssSpeedPxPerSec = (2 * Math.abs(projected.travelPx) * 1000) / projected.durationMs
+
+    expect(initialCssSpeedPxPerSec).toBeCloseTo(900, -1)
+  })
+
   it('uses swipe direction for final travel direction', () => {
     const up = calculateSpinOutcome({
       currentPositionPx: 0,
@@ -75,7 +93,7 @@ describe('spin physics', () => {
     expect(down.finalPositionPx).toBeLessThan(0)
   })
 
-  it('clamps excessive travel and duration', () => {
+  it('clamps excessive travel and duration from extreme velocities', () => {
     const result = calculateSpinOutcome({
       currentPositionPx: 0,
       dragDistancePx: 4000,
@@ -92,8 +110,10 @@ describe('spin physics', () => {
     expect(result.virtualCardsToTravel).toBeLessThanOrEqual(
       defaultSpinPhysicsConfig.maxVirtualCardsToTravel,
     )
-    expect(result.durationMs).toBeGreaterThanOrEqual(defaultSpinPhysicsConfig.minSpinDurationMs)
     expect(result.durationMs).toBeLessThanOrEqual(defaultSpinPhysicsConfig.maxSpinDurationMs)
+    expect(result.clampedReleaseVelocityPxPerSec).toBe(
+      defaultSpinPhysicsConfig.maxReleaseVelocityPxPerSec,
+    )
   })
 
   it('snaps positions by card step', () => {

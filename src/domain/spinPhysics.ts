@@ -6,6 +6,8 @@ export type SpinPhysicsConfig = {
   maxVirtualCardsToTravel: number
   randomJitterCards: number
   maxReleaseVelocityPxPerSec: number
+  inertialDecelerationPxPerSec2: number
+  finalSnapDurationMs: number
 }
 
 export type SpinCalculationInput = {
@@ -25,8 +27,14 @@ export type SpinCalculationResult =
     }
   | {
       kind: 'spin'
+      inertialPositionPx: number
       finalPositionPx: number
+      inertialDurationMs: number
+      snapDurationMs: number
       durationMs: number
+      projectedTravelPx: number
+      finalSnapDistancePx: number
+      clampedReleaseVelocityPxPerSec: number
       virtualCardsToTravel: number
     }
 
@@ -38,6 +46,8 @@ export const defaultSpinPhysicsConfig: SpinPhysicsConfig = {
   maxVirtualCardsToTravel: 45,
   randomJitterCards: 0.5,
   maxReleaseVelocityPxPerSec: 2600,
+  inertialDecelerationPxPerSec2: 220,
+  finalSnapDurationMs: 220,
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -63,6 +73,59 @@ export function isValidSpinGesture(
   )
 }
 
+export function clampReleaseVelocity(
+  releaseVelocityPxPerSec: number,
+  config: SpinPhysicsConfig = defaultSpinPhysicsConfig,
+): number {
+  const direction = releaseVelocityPxPerSec >= 0 ? 1 : -1
+  const speed = clamp(
+    Math.abs(releaseVelocityPxPerSec),
+    config.minReleaseVelocityPxPerSec,
+    config.maxReleaseVelocityPxPerSec,
+  )
+
+  return direction * speed
+}
+
+export function projectInertialTravelPx(
+  releaseVelocityPxPerSec: number,
+  cardStepPx: number,
+  config: SpinPhysicsConfig = defaultSpinPhysicsConfig,
+): {
+  travelPx: number
+  durationMs: number
+  clampedReleaseVelocityPxPerSec: number
+  virtualCardsToTravel: number
+} {
+  if (cardStepPx <= 0) {
+    throw new Error('Шаг карточки должен быть положительным.')
+  }
+
+  if (config.inertialDecelerationPxPerSec2 <= 0) {
+    throw new Error('Замедление вращения должно быть положительным.')
+  }
+
+  const clampedReleaseVelocityPxPerSec = clampReleaseVelocity(releaseVelocityPxPerSec, config)
+  const speed = Math.abs(clampedReleaseVelocityPxPerSec)
+  const direction = clampedReleaseVelocityPxPerSec >= 0 ? 1 : -1
+  const projectedTravelPx = (speed * speed) / (2 * config.inertialDecelerationPxPerSec2)
+  const maxTravelByCardsPx = config.maxVirtualCardsToTravel * cardStepPx
+  const maxTravelByDurationPx = (speed * config.maxSpinDurationMs) / 2000
+  const travelMagnitudePx = clamp(
+    projectedTravelPx,
+    0,
+    Math.min(maxTravelByCardsPx, maxTravelByDurationPx),
+  )
+  const durationMs = Math.round((travelMagnitudePx * 2000) / speed)
+
+  return {
+    travelPx: direction * travelMagnitudePx,
+    durationMs,
+    clampedReleaseVelocityPxPerSec,
+    virtualCardsToTravel: travelMagnitudePx / cardStepPx,
+  }
+}
+
 export function calculateSpinOutcome(input: SpinCalculationInput): SpinCalculationResult {
   const config = input.config ?? defaultSpinPhysicsConfig
 
@@ -78,44 +141,39 @@ export function calculateSpinOutcome(input: SpinCalculationInput): SpinCalculati
     }
   }
 
-  const direction = input.releaseVelocityPxPerSec >= 0 ? 1 : -1
-  const clampedVelocity = clamp(
-    Math.abs(input.releaseVelocityPxPerSec),
-    config.minReleaseVelocityPxPerSec,
-    config.maxReleaseVelocityPxPerSec,
+  const inertialProjection = projectInertialTravelPx(
+    input.releaseVelocityPxPerSec,
+    input.cardStepPx,
+    config,
   )
-  const dragCards = clamp(input.dragDistancePx / input.cardStepPx, 0, 12)
-  const velocityRatio =
-    (clampedVelocity - config.minReleaseVelocityPxPerSec) /
-    (config.maxReleaseVelocityPxPerSec - config.minReleaseVelocityPxPerSec)
-  const velocityCards = 8 + velocityRatio * 30
-  const virtualCardsToTravel = clamp(
-    velocityCards + dragCards * 0.58,
-    4,
-    config.maxVirtualCardsToTravel,
-  )
+  const direction = inertialProjection.clampedReleaseVelocityPxPerSec >= 0 ? 1 : -1
   const jitterCards = clamp(
     input.jitterCards ?? 0,
     -config.randomJitterCards,
     config.randomJitterCards,
   )
-  const rawFinalPositionPx =
-    input.currentPositionPx + direction * (virtualCardsToTravel + jitterCards) * input.cardStepPx
+  const inertialPositionPx = input.currentPositionPx + inertialProjection.travelPx
+  const rawFinalPositionPx = inertialPositionPx + direction * jitterCards * input.cardStepPx
   const finalPositionPx = snapPositionToCard(rawFinalPositionPx, input.cardStepPx)
-  const durationMs = Math.round(
+  const snapDistancePx = finalPositionPx - inertialPositionPx
+  const snapDurationMs = Math.round(
     clamp(
-      config.minSpinDurationMs +
-        (virtualCardsToTravel / config.maxVirtualCardsToTravel) *
-          (config.maxSpinDurationMs - config.minSpinDurationMs),
-      config.minSpinDurationMs,
-      config.maxSpinDurationMs,
+      (Math.abs(snapDistancePx) / input.cardStepPx) * config.finalSnapDurationMs,
+      120,
+      config.finalSnapDurationMs,
     ),
   )
 
   return {
     kind: 'spin',
+    inertialPositionPx,
     finalPositionPx,
-    durationMs,
-    virtualCardsToTravel,
+    inertialDurationMs: inertialProjection.durationMs,
+    snapDurationMs,
+    durationMs: inertialProjection.durationMs + snapDurationMs,
+    projectedTravelPx: inertialProjection.travelPx,
+    finalSnapDistancePx: snapDistancePx,
+    clampedReleaseVelocityPxPerSec: inertialProjection.clampedReleaseVelocityPxPerSec,
+    virtualCardsToTravel: inertialProjection.virtualCardsToTravel,
   }
 }
