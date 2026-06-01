@@ -66,6 +66,8 @@ const numberSettingControls: Array<{
   { key: 'subtitleFontSizePx', label: 'Размер подзаголовка', unit: 'px' },
   { key: 'cardBorderRadiusPx', label: 'Скругление карточки', unit: 'px' },
 ]
+const snapTransitionEasing = 'cubic-bezier(0.12, 0.72, 0.12, 1)'
+const spinTransitionEasing = 'cubic-bezier(0.33, 0.33, 0.67, 1)'
 
 function cloneWheelConfig(config: WheelConfig): WheelConfig {
   return {
@@ -273,6 +275,7 @@ function WheelView({
   config,
   positionPx,
   transitionMs,
+  transitionEasing = snapTransitionEasing,
   isInteractive,
   showActiveHighlight = true,
   viewportRef,
@@ -283,6 +286,7 @@ function WheelView({
   config: WheelConfig
   positionPx: number
   transitionMs: number
+  transitionEasing?: string
   isInteractive: boolean
   showActiveHighlight?: boolean
   viewportRef?: React.RefObject<HTMLDivElement | null>
@@ -366,6 +370,7 @@ function WheelView({
             {
               '--track-y': `${trackTranslatePx}px`,
               '--transition-ms': `${transitionMs}ms`,
+              '--transition-easing': transitionEasing,
             } as CSSProperties
           }
         >
@@ -400,6 +405,7 @@ function SpinScreen({
 }) {
   const [positionPx, setPositionPx] = useState(0)
   const [transitionMs, setTransitionMs] = useState(0)
+  const [transitionEasing, setTransitionEasing] = useState(snapTransitionEasing)
   const [isAnimating, setIsAnimating] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
@@ -443,6 +449,7 @@ function SpinScreen({
     animationTimerRef.current = undefined
     setIsAnimating(false)
     setTransitionMs(0)
+    setTransitionEasing(snapTransitionEasing)
     setPositionPx(normalizedPositionPx)
     debugLogger.log('spin', 'animation_end', {
       finalPositionPx,
@@ -471,6 +478,7 @@ function SpinScreen({
     pendingFinalPositionRef.current = finalPositionPx
     setIsAnimating(true)
     setTransitionMs(durationMs)
+    setTransitionEasing(result ? spinTransitionEasing : snapTransitionEasing)
     setPositionPx(finalPositionPx)
     debugLogger.log('spin', 'animation_start', {
       finalPositionPx,
@@ -509,6 +517,7 @@ function SpinScreen({
       lastTimeMs: timeMs,
     }
     setTransitionMs(0)
+    setTransitionEasing(snapTransitionEasing)
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -632,6 +641,7 @@ function SpinScreen({
         onPointerMove={handlePointerMove}
         positionPx={positionPx}
         showActiveHighlight={!isDragging && !isAnimating}
+        transitionEasing={transitionEasing}
         transitionMs={transitionMs}
         viewportRef={wheelRef}
       />
