@@ -514,6 +514,10 @@
   color: #f8fafc;
 }
 
+.debugActions button:disabled {
+  opacity: 0.45;
+}
+
 .debugPanel summary {
   cursor: pointer;
 }

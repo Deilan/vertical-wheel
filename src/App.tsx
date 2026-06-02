@@ -45,7 +45,7 @@ import type {
 import { WHEEL_LIMITS, WHEEL_SETTING_LIMITS } from './domain/types'
 import { parseWheelConfigJson } from './domain/validation'
 import { getWheelFingerprint } from './domain/fingerprint'
-import { getWinningOption } from './domain/winningOption'
+import { getWinningOption, getWinningOptionIndex } from './domain/winningOption'
 import {
   loadWheelHistory,
   saveWheelHistory,
@@ -57,6 +57,17 @@ import {
 import { loadWheelConfig, saveWheelConfig } from './storage/wheelStorage'
 import { debugLogger } from './utils/debugLogger'
 import { compressImageFile, isSupportedImageFile } from './utils/imageCompression'
+import {
+  appendBoundedFrameSample,
+  appendBoundedPointerSample,
+  createSpinTelemetryReport,
+} from './utils/spinTelemetry'
+import type {
+  SpinTelemetryFrameSample,
+  SpinTelemetryOptionSummary,
+  SpinTelemetryPointerSample,
+  SpinTelemetryReport,
+} from './utils/spinTelemetry'
 import styles from './App.module.css'
 
 type AppMode = 'spin' | 'edit'
@@ -70,10 +81,12 @@ type GestureState = {
   pointerId: number
   startY: number
   startPositionPx: number
+  startTimeMs: number
   previousY: number
   previousTimeMs: number
   lastY: number
   lastTimeMs: number
+  pointerSamples: SpinTelemetryPointerSample[]
 }
 
 const historyDateFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -217,6 +230,21 @@ function getOptionSummary(option: WheelOption) {
     hasEmoji: Boolean(option.emoji),
     hasImage: Boolean(option.image),
     image: option.image,
+  }
+}
+
+function getTelemetryOptionSummary(
+  option: WheelOption | undefined,
+  index?: number,
+): SpinTelemetryOptionSummary | undefined {
+  if (!option) {
+    return undefined
+  }
+
+  return {
+    id: option.id,
+    title: option.title,
+    index,
   }
 }
 
@@ -517,8 +545,10 @@ function SpinScreen({
   const wheelRef = useRef<HTMLDivElement | null>(null)
   const gestureRef = useRef<GestureState | null>(null)
   const animationTimerRef = useRef<number | undefined>(undefined)
+  const frameSamplerRef = useRef<number | undefined>(undefined)
   const pendingFinalPositionRef = useRef<number | undefined>(undefined)
   const pendingResultRef = useRef<WheelOption | undefined>(undefined)
+  const activeSpinReportRef = useRef<SpinTelemetryReport | undefined>(undefined)
   const isAnimatingRef = useRef(false)
   const positionRef = useRef(0)
   const [resultStatus, setResultStatus] = useState<string | undefined>()
@@ -566,8 +596,63 @@ function SpinScreen({
       if (animationTimerRef.current !== undefined) {
         window.clearTimeout(animationTimerRef.current)
       }
+      if (frameSamplerRef.current !== undefined) {
+        window.cancelAnimationFrame(frameSamplerRef.current)
+      }
     }
   }, [])
+
+  function appendFrameSample(sample: SpinTelemetryFrameSample) {
+    const report = activeSpinReportRef.current
+
+    if (!report) {
+      return
+    }
+
+    report.frameSamples = appendBoundedFrameSample(report.frameSamples, sample)
+  }
+
+  function startFrameSampling({
+    fromPositionPx,
+    toPositionPx,
+    durationMs,
+    phase,
+  }: {
+    fromPositionPx: number
+    toPositionPx: number
+    durationMs: number
+    phase: SpinTelemetryFrameSample['phase']
+  }) {
+    if (!activeSpinReportRef.current || durationMs <= 0) {
+      return
+    }
+
+    if (frameSamplerRef.current !== undefined) {
+      window.cancelAnimationFrame(frameSamplerRef.current)
+    }
+
+    const startTimeMs = performance.now()
+    const approximateVelocityPxPerSec = ((toPositionPx - fromPositionPx) / durationMs) * 1000
+
+    function sampleFrame(nowMs: number) {
+      const elapsedMs = Math.min(nowMs - startTimeMs, durationMs)
+      const progress = elapsedMs / durationMs
+      const positionPx = fromPositionPx + (toPositionPx - fromPositionPx) * progress
+
+      appendFrameSample({
+        elapsedMs: Math.round(elapsedMs),
+        positionPx,
+        approximateVelocityPxPerSec,
+        phase,
+      })
+
+      if (elapsedMs < durationMs) {
+        frameSamplerRef.current = window.requestAnimationFrame(sampleFrame)
+      }
+    }
+
+    frameSamplerRef.current = window.requestAnimationFrame(sampleFrame)
+  }
 
   function finishAnimation() {
     const result = pendingResultRef.current
@@ -584,6 +669,26 @@ function SpinScreen({
     setTransitionMs(0)
     setTransitionEasing(snapTransitionEasing)
     setPositionPx(normalizedPositionPx)
+    if (frameSamplerRef.current !== undefined) {
+      window.cancelAnimationFrame(frameSamplerRef.current)
+      frameSamplerRef.current = undefined
+    }
+    if (activeSpinReportRef.current) {
+      activeSpinReportRef.current.frameSamples = appendBoundedFrameSample(
+        activeSpinReportRef.current.frameSamples,
+        {
+          elapsedMs:
+            activeSpinReportRef.current.valid?.totalSpinDurationMs ??
+            activeSpinReportRef.current.weak?.snapDistancePx ??
+            0,
+          positionPx: finalPositionPx,
+          approximateVelocityPxPerSec: 0,
+          phase: 'complete',
+        },
+      )
+      debugLogger.addSpinReport(activeSpinReportRef.current)
+      activeSpinReportRef.current = undefined
+    }
     debugLogger.log('spin', 'animation_end', {
       finalPositionPx,
       normalizedPositionPx,
@@ -709,6 +814,12 @@ function SpinScreen({
     setTransitionMs(inertialDurationMs)
     setTransitionEasing(spinTransitionEasing)
     setPositionPx(inertialPositionPx)
+    startFrameSampling({
+      fromPositionPx: positionRef.current,
+      toPositionPx: inertialPositionPx,
+      durationMs: inertialDurationMs,
+      phase: 'deceleration',
+    })
     debugLogger.log('spin', 'animation_start', {
       inertialPositionPx,
       finalPositionPx,
@@ -720,6 +831,12 @@ function SpinScreen({
       setTransitionMs(snapDurationMs)
       setTransitionEasing(snapTransitionEasing)
       setPositionPx(finalPositionPx)
+      startFrameSampling({
+        fromPositionPx: inertialPositionPx,
+        toPositionPx: finalPositionPx,
+        durationMs: snapDurationMs,
+        phase: 'final-snap',
+      })
       debugLogger.log('spin', 'final_snap_start', {
         inertialPositionPx,
         finalPositionPx,
@@ -760,10 +877,18 @@ function SpinScreen({
       pointerId: event.pointerId,
       startY: event.clientY,
       startPositionPx,
+      startTimeMs: timeMs,
       previousY: event.clientY,
       previousTimeMs: timeMs,
       lastY: event.clientY,
       lastTimeMs: timeMs,
+      pointerSamples: [
+        {
+          timestampMs: timeMs,
+          y: event.clientY,
+          positionPx: startPositionPx,
+        },
+      ],
     }
     setTransitionMs(0)
     setTransitionEasing(snapTransitionEasing)
@@ -787,6 +912,14 @@ function SpinScreen({
     gesture.previousTimeMs = gesture.lastTimeMs
     gesture.lastY = event.clientY
     gesture.lastTimeMs = timeMs
+    gesture.pointerSamples = appendBoundedPointerSample(gesture.pointerSamples, {
+      timestampMs: timeMs,
+      y: event.clientY,
+      positionPx: nextPositionPx,
+      instantaneousVelocityPxPerSec:
+        ((event.clientY - gesture.previousY) / Math.max(timeMs - gesture.previousTimeMs, 16)) *
+        -1000,
+    })
     setPositionPx(nextPositionPx)
   }
 
@@ -809,14 +942,22 @@ function SpinScreen({
     const pointerVelocityPxPerSec =
       ((gesture.lastY - gesture.previousY) / timeDeltaMs) * 1000
     const releaseVelocityPxPerSec = -pointerVelocityPxPerSec
+    const releasePositionPx = positionRef.current
+    const dragDurationMs = Math.max(gesture.lastTimeMs - gesture.startTimeMs, 0)
+    const pointerSamples = appendBoundedPointerSample(gesture.pointerSamples, {
+      timestampMs: performance.now(),
+      y: event.clientY,
+      positionPx: releasePositionPx,
+      instantaneousVelocityPxPerSec: releaseVelocityPxPerSec,
+    })
     debugLogger.log('spin', 'pointer_up', {
       pointerType: event.pointerType,
       dragDistancePx,
       releaseVelocityPxPerSec,
-      positionPx: positionRef.current,
+      positionPx: releasePositionPx,
     })
     const outcome = calculateSpinOutcome({
-      currentPositionPx: positionRef.current,
+      currentPositionPx: releasePositionPx,
       dragDistancePx,
       releaseVelocityPxPerSec,
       cardStepPx,
@@ -857,6 +998,94 @@ function SpinScreen({
       outcome.kind === 'spin'
         ? adjustedLanding?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
         : undefined
+    const rawCandidateIndex =
+      outcome.kind === 'spin'
+        ? getWinningOptionIndex(outcome.finalPositionPx, cardStepPx, visibleOptions.length)
+        : undefined
+    const rawCandidate =
+      rawCandidateIndex === undefined ? undefined : visibleOptions[rawCandidateIndex]
+    const candidateWasExcluded = rawCandidate
+      ? getExcludedOptionDisplayMode(rawCandidate.id, sessionState) !== undefined
+      : false
+
+    if (debugLogger.isEnabled()) {
+      if (outcome.kind === 'snap') {
+        debugLogger.addSpinReport(
+          createSpinTelemetryReport({
+            classification: 'weak gesture',
+            dragDistancePx,
+            dragDurationMs,
+            releaseVelocityPxPerSecRaw: releaseVelocityPxPerSec,
+            releaseVelocityPxPerSecAfterClamp: releaseVelocityPxPerSec,
+            direction: releaseVelocityPxPerSec >= 0 ? 'up' : 'down',
+            startPositionPx: gesture.startPositionPx,
+            releasePositionPx,
+            cardStepPx,
+            optionCount: config.wheel.options.length,
+            visibleOptionCount: visibleOptions.length,
+            activeOptionCount,
+            excludedOptionCount,
+            thresholds: {
+              minDragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
+              minReleaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
+            },
+            pointerSamples,
+            frameSamples: [],
+            weak: {
+              snapTargetPositionPx: outcome.finalPositionPx,
+              snapDistancePx: outcome.finalPositionPx - releasePositionPx,
+              noResult: true,
+            },
+          }),
+        )
+      } else {
+        activeSpinReportRef.current = createSpinTelemetryReport({
+          classification: 'valid spin gesture',
+          dragDistancePx,
+          dragDurationMs,
+          releaseVelocityPxPerSecRaw: releaseVelocityPxPerSec,
+          releaseVelocityPxPerSecAfterClamp: outcome.clampedReleaseVelocityPxPerSec,
+          direction: releaseVelocityPxPerSec >= 0 ? 'up' : 'down',
+          startPositionPx: gesture.startPositionPx,
+          releasePositionPx,
+          cardStepPx,
+          optionCount: config.wheel.options.length,
+          visibleOptionCount: visibleOptions.length,
+          activeOptionCount,
+          excludedOptionCount,
+          thresholds: {
+            minDragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
+            minReleaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
+          },
+          pointerSamples,
+          frameSamples: [],
+          valid: {
+            initialVelocityPxPerSec: releaseVelocityPxPerSec,
+            velocityClamp: {
+              minPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
+              maxPxPerSec: defaultSpinPhysicsConfig.maxReleaseVelocityPxPerSec,
+              wasClamped:
+                outcome.clampedReleaseVelocityPxPerSec !== releaseVelocityPxPerSec,
+            },
+            projectedTravelDistancePx: outcome.projectedTravelPx,
+            actualAnimatedTravelDistancePx: finalPositionPx - releasePositionPx,
+            decelerationDurationMs: outcome.inertialDurationMs,
+            totalSpinDurationMs: outcome.inertialDurationMs + snapDurationMs,
+            finalSnapDistancePx,
+            finalPositionBeforeSnapPx: inertialPositionPx,
+            finalSnappedPositionPx: finalPositionPx,
+            rawLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex),
+            adjustedEligibleOption: getTelemetryOptionSummary(
+              adjustedLanding?.option ?? result,
+              adjustedLanding?.index ?? rawCandidateIndex,
+            ),
+            selectedResult: getTelemetryOptionSummary(result, adjustedLanding?.index ?? rawCandidateIndex),
+            candidateWasExcluded,
+            adjustedDueToExclusion: candidateWasExcluded,
+          },
+        })
+      }
+    }
 
     debugLogger.log('spin', outcome.kind === 'spin' ? 'valid_spin' : 'weak_gesture', {
       outcome,
@@ -1706,12 +1935,20 @@ function OptionEditor({
 
 function DebugPanel({
   events,
+  spinReports,
   onClear,
+  onClearSpinReports,
   onCopy,
+  onCopyAllSpinReports,
+  onCopyLastSpinReport,
 }: {
   events: ReturnType<typeof debugLogger.getEvents>
+  spinReports: ReturnType<typeof debugLogger.getSpinReports>
   onClear: () => void
+  onClearSpinReports: () => void
   onCopy: () => void
+  onCopyAllSpinReports: () => void
+  onCopyLastSpinReport: () => void
 }) {
   const recentEvents = events.slice(-20).reverse()
 
@@ -1729,6 +1966,20 @@ function DebugPanel({
           Очистить лог
         </button>
       </div>
+      <details>
+        <summary>Spin reports ({spinReports.length})</summary>
+        <div className={styles.debugActions}>
+          <button type="button" onClick={onCopyLastSpinReport} disabled={spinReports.length === 0}>
+            Скопировать последний spin report
+          </button>
+          <button type="button" onClick={onCopyAllSpinReports} disabled={spinReports.length === 0}>
+            Скопировать все spin reports
+          </button>
+          <button type="button" onClick={onClearSpinReports} disabled={spinReports.length === 0}>
+            Очистить spin reports
+          </button>
+        </div>
+      </details>
       <details>
         <summary>Последние события</summary>
         <ol className={styles.debugEventList}>
@@ -1750,6 +2001,7 @@ function App() {
     debugLogger.configureFromSearch(window.location.search, window.sessionStorage),
   )
   const [debugEvents, setDebugEvents] = useState(debugLogger.getEvents())
+  const [spinReports, setSpinReports] = useState(debugLogger.getSpinReports())
   const [config, setConfig] = useState<WheelConfig>(() => getInitialWheelConfig())
   const [sessionState, setSessionState] = useState<WheelSessionState>(() =>
     createWheelSessionState(demoWheelConfig),
@@ -1767,6 +2019,7 @@ function App() {
     return debugLogger.subscribe(() => {
       setIsDebugEnabled(debugLogger.isEnabled())
       setDebugEvents(debugLogger.getEvents())
+      setSpinReports(debugLogger.getSpinReports())
     })
   }, [])
 
@@ -2031,8 +2284,44 @@ function App() {
     }
   }
 
+  async function handleCopyLastSpinReport() {
+    const report = debugLogger.getLastSpinReport()
+
+    if (!report) {
+      return
+    }
+
+    try {
+      await copyTextToClipboard(JSON.stringify(report, null, 2))
+      debugLogger.log('app', 'spin_report_copy_success', {
+        reportId: report.reportId,
+      })
+    } catch (error) {
+      debugLogger.log('app', 'spin_report_copy_error', {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
+    }
+  }
+
+  async function handleCopyAllSpinReports() {
+    try {
+      await copyTextToClipboard(JSON.stringify(debugLogger.getSpinReports(), null, 2))
+      debugLogger.log('app', 'spin_reports_copy_success', {
+        reportCount: debugLogger.getSpinReports().length,
+      })
+    } catch (error) {
+      debugLogger.log('app', 'spin_reports_copy_error', {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      })
+    }
+  }
+
   function handleClearDebugLog() {
     debugLogger.clear()
+  }
+
+  function handleClearSpinReports() {
+    debugLogger.clearSpinReports()
   }
 
   return (
@@ -2074,9 +2363,17 @@ function App() {
       {isDebugEnabled ? (
         <DebugPanel
           events={debugEvents}
+          spinReports={spinReports}
           onClear={handleClearDebugLog}
+          onClearSpinReports={handleClearSpinReports}
           onCopy={() => {
             void handleCopyDebugLog()
+          }}
+          onCopyAllSpinReports={() => {
+            void handleCopyAllSpinReports()
+          }}
+          onCopyLastSpinReport={() => {
+            void handleCopyLastSpinReport()
           }}
         />
       ) : null}

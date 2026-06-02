@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDebugLogger, sanitizeDebugPayload } from './debugLogger'
+import { createSpinTelemetryReport } from './spinTelemetry'
 
 describe('debug logger', () => {
   it('does not store events when disabled', () => {
@@ -61,5 +62,44 @@ describe('debug logger', () => {
         mimePrefix: 'data:image/webp',
       },
     })
+  })
+
+  it('stores and clears spin telemetry reports only when enabled', () => {
+    const disabledLogger = createDebugLogger(false)
+    const enabledLogger = createDebugLogger(true)
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
+    const report = createSpinTelemetryReport({
+      reportId: 'spin-report-test',
+      timestamp: '2026-06-02T00:00:00.000Z',
+      classification: 'valid spin gesture',
+      dragDistancePx: 80,
+      dragDurationMs: 220,
+      releaseVelocityPxPerSecRaw: 900,
+      releaseVelocityPxPerSecAfterClamp: 900,
+      direction: 'up',
+      startPositionPx: 0,
+      releasePositionPx: 120,
+      cardStepPx: 100,
+      optionCount: 3,
+      visibleOptionCount: 3,
+      activeOptionCount: 3,
+      excludedOptionCount: 0,
+      thresholds: {
+        minDragDistancePx: 40,
+        minReleaseVelocityPxPerSec: 350,
+      },
+      pointerSamples: [],
+      frameSamples: [],
+    })
+
+    disabledLogger.addSpinReport(report)
+    enabledLogger.addSpinReport(report)
+
+    expect(disabledLogger.getSpinReports()).toHaveLength(0)
+    expect(enabledLogger.getLastSpinReport()?.reportId).toBe('spin-report-test')
+
+    enabledLogger.clearSpinReports()
+    expect(enabledLogger.getSpinReports()).toHaveLength(0)
+    debug.mockRestore()
   })
 })

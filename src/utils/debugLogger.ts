@@ -1,3 +1,5 @@
+import type { SpinTelemetryReport } from './spinTelemetry'
+
 export type DebugCategory =
   | 'app'
   | 'share'
@@ -23,6 +25,7 @@ type DebugStorage = Pick<Storage, 'getItem' | 'setItem'>
 
 const DEBUG_STORAGE_KEY = 'vertical-wheel:debug'
 const MAX_EVENTS = 300
+const MAX_SPIN_REPORTS = 50
 const MAX_STRING_LENGTH = 180
 const MAX_ARRAY_ITEMS = 20
 const MAX_DEPTH = 4
@@ -126,6 +129,7 @@ export function createDebugLogger(initialEnabled = false) {
   let enabled = initialEnabled
   let nextId = 1
   let events: DebugEvent[] = []
+  let spinReports: SpinTelemetryReport[] = []
   const subscribers = new Set<() => void>()
 
   function notify() {
@@ -183,6 +187,38 @@ export function createDebugLogger(initialEnabled = false) {
 
     getEvents() {
       return events
+    },
+
+    addSpinReport(report: SpinTelemetryReport) {
+      if (!enabled) {
+        return undefined
+      }
+
+      spinReports = [...spinReports, report].slice(-MAX_SPIN_REPORTS)
+      console.debug('[vertical-wheel] spin report', {
+        reportId: report.reportId,
+        classification: report.classification,
+        dragDistancePx: report.dragDistancePx,
+        releaseVelocityPxPerSecRaw: report.releaseVelocityPxPerSecRaw,
+        releaseVelocityPxPerSecAfterClamp: report.releaseVelocityPxPerSecAfterClamp,
+        selectedResult: report.valid?.selectedResult,
+      })
+      notify()
+
+      return report
+    },
+
+    getSpinReports() {
+      return spinReports
+    },
+
+    getLastSpinReport() {
+      return spinReports.at(-1)
+    },
+
+    clearSpinReports() {
+      spinReports = []
+      notify()
     },
 
     clear() {
