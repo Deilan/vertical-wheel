@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent } from 'react'
 import {
   getCyclicWheelRepeatCycles,
@@ -72,7 +72,7 @@ import styles from './App.module.css'
 
 type AppMode = 'spin' | 'edit'
 type NumberSettingKey = keyof typeof WHEEL_SETTING_LIMITS
-type AppMessage = { kind: 'success' | 'error'; text: string }
+type AppMessage = { kind: 'success' | 'info' | 'error'; text: string }
 type PendingAfterResultDecision = {
   option: WheelOption
   allowedDecisions: AfterResultDecision[]
@@ -519,7 +519,6 @@ function SpinScreen({
   history,
   sessionState,
   pendingDecision,
-  statusMessage,
   validationMessages,
   onHistoryChange,
   onSessionChange,
@@ -530,7 +529,6 @@ function SpinScreen({
   history: WheelHistory
   sessionState: WheelSessionState
   pendingDecision?: PendingAfterResultDecision
-  statusMessage?: AppMessage
   validationMessages: string[]
   onHistoryChange: (history: WheelHistory) => void
   onSessionChange: (sessionState: WheelSessionState) => void
@@ -1207,12 +1205,6 @@ function SpinScreen({
         </div>
       ) : null}
 
-      {statusMessage ? (
-        <div className={statusMessage.kind === 'error' ? styles.compactError : styles.compactStatus} role="status">
-          {statusMessage.text}
-        </div>
-      ) : null}
-
       <WheelView
         config={visibleConfig}
         disabledOptionIds={disabledOptionIds}
@@ -1342,6 +1334,38 @@ function ResultHistory({
   )
 }
 
+function ToastNotification({
+  message,
+  onClose,
+}: {
+  message: AppMessage
+  onClose: () => void
+}) {
+  useEffect(() => {
+    if (message.kind === 'error') {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(onClose, 4000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [message, onClose])
+
+  return (
+    <aside
+      className={styles.toast}
+      data-kind={message.kind}
+      role={message.kind === 'error' ? 'alert' : 'status'}
+      aria-live={message.kind === 'error' ? 'assertive' : 'polite'}
+    >
+      <span>{message.text}</span>
+      <button type="button" onClick={onClose} aria-label="Закрыть уведомление">
+        ×
+      </button>
+    </aside>
+  )
+}
+
 function EditScreen({
   config,
   validationMessages,
@@ -1351,7 +1375,6 @@ function EditScreen({
   onShareLink,
   onStatus,
   onSpin,
-  statusMessage,
 }: {
   config: WheelConfig
   validationMessages: string[]
@@ -1361,7 +1384,6 @@ function EditScreen({
   onShareLink: () => void
   onStatus: (message: AppMessage) => void
   onSpin: () => void
-  statusMessage?: AppMessage
 }) {
   const { wheel } = config
 
@@ -1526,12 +1548,6 @@ function EditScreen({
               <li key={message}>{message}</li>
             ))}
           </ul>
-        </div>
-      ) : null}
-
-      {statusMessage ? (
-        <div className={statusMessage.kind === 'error' ? styles.validationBox : styles.statusBox} role="status">
-          {statusMessage.text}
         </div>
       ) : null}
 
@@ -2053,6 +2069,7 @@ function App() {
   const [isConfigLoaded, setIsConfigLoaded] = useState(false)
   const [statusMessage, setStatusMessage] = useState<AppMessage | undefined>()
   const validationMessages = useMemo(() => validateEditableConfig(config), [config])
+  const closeToast = useCallback(() => setStatusMessage(undefined), [])
 
   useEffect(() => {
     return debugLogger.subscribe(() => {
@@ -2134,7 +2151,7 @@ function App() {
         setMode('spin')
         setStatusMessage({
           kind: 'success',
-          text: 'Барабан из ссылки загружен. Картинки в ссылку не входят.',
+          text: 'Барабан из ссылки загружен. Картинки не входят в ссылку.',
         })
         setIsConfigLoaded(true)
         return
@@ -2301,7 +2318,7 @@ function App() {
       debugLogger.log('share', 'copy_success', {
         shareUrl: shareUrl.value,
       })
-      setStatusMessage({ kind: 'success', text: 'Ссылка скопирована. Картинки в нее не входят.' })
+      setStatusMessage({ kind: 'success', text: 'Ссылка скопирована. Картинки не входят в ссылку.' })
     } catch (error) {
       debugLogger.log('share', 'copy_error', {
         error: error instanceof Error ? error.message : 'unknown_error',
@@ -2379,7 +2396,6 @@ function App() {
           onSessionChange={handleSessionChange}
           pendingDecision={pendingDecision}
           sessionState={sessionState}
-          statusMessage={statusMessage}
           validationMessages={validationMessages}
         />
       ) : (
@@ -2395,10 +2411,15 @@ function App() {
           }}
           onStatus={setStatusMessage}
           onSpin={() => setMode('spin')}
-          statusMessage={statusMessage}
           validationMessages={validationMessages}
         />
       )}
+      {statusMessage ? (
+        <ToastNotification
+          message={statusMessage}
+          onClose={closeToast}
+        />
+      ) : null}
       {isDebugEnabled ? (
         <DebugPanel
           events={debugEvents}
