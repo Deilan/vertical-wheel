@@ -15,7 +15,6 @@ import {
 import {
   adjustLandingPositionToEligibleOption,
   applyAfterResultDecision,
-  canSpinWithActiveOptions,
   getActiveOptionCount,
   getAutomaticAfterResultDecision,
   getEffectiveAfterResultBehavior,
@@ -30,6 +29,7 @@ import {
 import {
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
+  snapPositionToCard,
 } from './domain/spinPhysics'
 import { createShareHash, readShareConfigFromHash } from './domain/shareConfig'
 import type {
@@ -577,10 +577,14 @@ function SpinScreen({
   const activeOptionCount = getActiveOptionCount(config.wheel.options, sessionState)
   const excludedOptionCount = sessionState.excludedOptions.length
   const isValid = validationMessages.length === 0
-  const isSpinAllowed =
-    isValid &&
-    !pendingDecision &&
-    canSpinWithActiveOptions(config.wheel.options, sessionState)
+  const isSpinLockedByActiveCount = activeOptionCount < 2
+  const canDragWheel = isValid && !pendingDecision && visibleOptions.length > 0
+  const activeCountLockMessage =
+    isSpinLockedByActiveCount
+      ? activeOptionCount === 1
+        ? 'Нельзя крутить: осталась одна активная опция.'
+        : 'Нельзя крутить: нет активных опций.'
+      : undefined
 
   useEffect(() => {
     positionRef.current = positionPx
@@ -879,7 +883,7 @@ function SpinScreen({
       return
     }
 
-    if (isAnimatingRef.current || !isSpinAllowed || visibleOptions.length === 0) {
+    if (isAnimatingRef.current || !isValid || visibleOptions.length === 0) {
       return
     }
 
@@ -981,6 +985,51 @@ function SpinScreen({
       releaseVelocityPxPerSec,
       positionPx: releasePositionPx,
     })
+
+    if (isSpinLockedByActiveCount) {
+      const finalPositionPx = snapPositionToCard(releasePositionPx, cardStepPx)
+      debugLogger.log('spin', 'blocked-active-count', {
+        activeCount: activeOptionCount,
+        excludedCount: excludedOptionCount,
+        dragDistancePx,
+        releaseVelocityPxPerSec,
+      })
+
+      if (debugLogger.isEnabled()) {
+        debugLogger.addSpinReport(
+          createSpinTelemetryReport({
+            classification: 'weak gesture',
+            dragDistancePx,
+            dragDurationMs,
+            releaseVelocityPxPerSecRaw: releaseVelocityPxPerSec,
+            releaseVelocityPxPerSecAfterClamp: releaseVelocityPxPerSec,
+            direction: releaseVelocityPxPerSec >= 0 ? 'up' : 'down',
+            startPositionPx: gesture.startPositionPx,
+            releasePositionPx,
+            cardStepPx,
+            optionCount: config.wheel.options.length,
+            visibleOptionCount: visibleOptions.length,
+            activeOptionCount,
+            excludedOptionCount,
+            thresholds: {
+              minDragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
+              minReleaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
+            },
+            pointerSamples,
+            frameSamples: [],
+            weak: {
+              snapTargetPositionPx: finalPositionPx,
+              snapDistancePx: finalPositionPx - releasePositionPx,
+              noResult: true,
+            },
+          }),
+        )
+      }
+
+      animateTo(finalPositionPx, 260)
+      return
+    }
+
     const outcome = calculateSpinOutcome({
       currentPositionPx: releasePositionPx,
       dragDistancePx,
@@ -1188,27 +1237,28 @@ function SpinScreen({
       )}
 
       <section className={styles.sessionStatus} aria-label="Состояние исключённых опций">
-        <span>Активно: {activeOptionCount} из {config.wheel.options.length}</span>
-        <span>Исключено: {excludedOptionCount}</span>
-        {excludedOptionCount > 0 ? (
-          <button className={styles.inlineButton} type="button" onClick={restoreAllOptions}>
-            Вернуть все исключённые
-          </button>
-        ) : null}
-      </section>
-
-      {activeOptionCount < 2 ? (
-        <div className={styles.compactWarning} role="alert">
-          {activeOptionCount === 1
-            ? 'Осталась одна активная опция. Верните исключённые опции.'
-            : 'Нет активных опций. Верните исключённые опции.'}
+        <div className={styles.sessionSummary}>
+          <span>Активно: {activeOptionCount} из {config.wheel.options.length}</span>
+          <span>Исключено: {excludedOptionCount}</span>
+          {excludedOptionCount > 0 ? (
+            <button className={styles.inlineButton} type="button" onClick={restoreAllOptions}>
+              Вернуть все
+            </button>
+          ) : null}
         </div>
-      ) : null}
+        <p
+          className={styles.sessionLockMessage}
+          data-visible={activeCountLockMessage ? 'true' : 'false'}
+          role={activeCountLockMessage ? 'alert' : undefined}
+        >
+          {activeCountLockMessage}
+        </p>
+      </section>
 
       <WheelView
         config={visibleConfig}
         disabledOptionIds={disabledOptionIds}
-        isInteractive={isSpinAllowed}
+        isInteractive={canDragWheel}
         onPointerDown={handlePointerDown}
         onPointerEnd={endGesture}
         onPointerMove={handlePointerMove}

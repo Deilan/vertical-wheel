@@ -306,7 +306,7 @@
 }
 
 .resultActions,
-.sessionStatus {
+.sessionSummary {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -314,12 +314,30 @@
 }
 
 .sessionStatus {
+  display: grid;
+  gap: 5px;
   padding: 8px 10px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   background: var(--panel-bg);
   color: var(--muted-text);
   font-size: 13px;
+}
+
+.sessionLockMessage {
+  min-height: 15px;
+  margin: 0;
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.sessionLockMessage[data-visible='false'] {
+  visibility: hidden;
+}
+
+.page[data-theme='light'] .sessionLockMessage {
+  color: #7f1d1d;
 }
 
 .compactStatus,
