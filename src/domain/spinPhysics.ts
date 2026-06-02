@@ -6,6 +6,8 @@ export type SpinPhysicsConfig = {
   maxVirtualCardsToTravel: number
   randomJitterCards: number
   maxReleaseVelocityPxPerSec: number
+  minCoastMs: number
+  maxCoastMs: number
   inertialDecelerationPxPerSec2: number
   finalSnapDurationMs: number
 }
@@ -27,14 +29,18 @@ export type SpinCalculationResult =
     }
   | {
       kind: 'spin'
+      coastPositionPx: number
       inertialPositionPx: number
       finalPositionPx: number
+      coastDurationMs: number
+      decelerationDurationMs: number
       inertialDurationMs: number
       snapDurationMs: number
       durationMs: number
       projectedTravelPx: number
       finalSnapDistancePx: number
       clampedReleaseVelocityPxPerSec: number
+      safetyClampApplied: boolean
       virtualCardsToTravel: number
     }
 
@@ -42,11 +48,13 @@ export const defaultSpinPhysicsConfig: SpinPhysicsConfig = {
   minDragDistancePx: 40,
   minReleaseVelocityPxPerSec: 350,
   minSpinDurationMs: 1200,
-  maxSpinDurationMs: 4500,
-  maxVirtualCardsToTravel: 45,
-  randomJitterCards: 0.5,
-  maxReleaseVelocityPxPerSec: 2600,
-  inertialDecelerationPxPerSec2: 220,
+  maxSpinDurationMs: 6500,
+  maxVirtualCardsToTravel: 90,
+  randomJitterCards: 0,
+  maxReleaseVelocityPxPerSec: 4200,
+  minCoastMs: 120,
+  maxCoastMs: 620,
+  inertialDecelerationPxPerSec2: 650,
   finalSnapDurationMs: 220,
 }
 
@@ -93,8 +101,13 @@ export function projectInertialTravelPx(
   config: SpinPhysicsConfig = defaultSpinPhysicsConfig,
 ): {
   travelPx: number
+  coastTravelPx: number
+  decelerationTravelPx: number
+  coastDurationMs: number
+  decelerationDurationMs: number
   durationMs: number
   clampedReleaseVelocityPxPerSec: number
+  safetyClampApplied: boolean
   virtualCardsToTravel: number
 } {
   if (cardStepPx <= 0) {
@@ -108,20 +121,42 @@ export function projectInertialTravelPx(
   const clampedReleaseVelocityPxPerSec = clampReleaseVelocity(releaseVelocityPxPerSec, config)
   const speed = Math.abs(clampedReleaseVelocityPxPerSec)
   const direction = clampedReleaseVelocityPxPerSec >= 0 ? 1 : -1
-  const projectedTravelPx = (speed * speed) / (2 * config.inertialDecelerationPxPerSec2)
-  const maxTravelByCardsPx = config.maxVirtualCardsToTravel * cardStepPx
-  const maxTravelByDurationPx = (speed * config.maxSpinDurationMs) / 2000
-  const travelMagnitudePx = clamp(
-    projectedTravelPx,
-    0,
-    Math.min(maxTravelByCardsPx, maxTravelByDurationPx),
+  const velocityRatio =
+    (speed - config.minReleaseVelocityPxPerSec) /
+    (config.maxReleaseVelocityPxPerSec - config.minReleaseVelocityPxPerSec)
+  const coastDurationMs = Math.round(
+    clamp(
+      config.minCoastMs + velocityRatio * (config.maxCoastMs - config.minCoastMs),
+      config.minCoastMs,
+      config.maxCoastMs,
+    ),
   )
-  const durationMs = Math.round((travelMagnitudePx * 2000) / speed)
+  const decelerationDurationMs = Math.round((speed / config.inertialDecelerationPxPerSec2) * 1000)
+  const coastTravelPx = speed * (coastDurationMs / 1000)
+  const decelerationTravelPx = (speed * speed) / (2 * config.inertialDecelerationPxPerSec2)
+  const projectedTravelPx = coastTravelPx + decelerationTravelPx
+  const maxTravelByCardsPx = config.maxVirtualCardsToTravel * cardStepPx
+  const uncappedDurationMs = coastDurationMs + decelerationDurationMs
+  const safetyClampApplied =
+    projectedTravelPx > maxTravelByCardsPx || uncappedDurationMs > config.maxSpinDurationMs
+  const travelScale = safetyClampApplied
+    ? Math.min(maxTravelByCardsPx / projectedTravelPx, config.maxSpinDurationMs / uncappedDurationMs)
+    : 1
+  const scaledCoastTravelPx = coastTravelPx * travelScale
+  const scaledDecelerationTravelPx = decelerationTravelPx * travelScale
+  const scaledCoastDurationMs = Math.round(coastDurationMs * travelScale)
+  const scaledDecelerationDurationMs = Math.round(decelerationDurationMs * travelScale)
+  const travelMagnitudePx = scaledCoastTravelPx + scaledDecelerationTravelPx
 
   return {
     travelPx: direction * travelMagnitudePx,
-    durationMs,
+    coastTravelPx: direction * scaledCoastTravelPx,
+    decelerationTravelPx: direction * scaledDecelerationTravelPx,
+    coastDurationMs: scaledCoastDurationMs,
+    decelerationDurationMs: scaledDecelerationDurationMs,
+    durationMs: scaledCoastDurationMs + scaledDecelerationDurationMs,
     clampedReleaseVelocityPxPerSec,
+    safetyClampApplied,
     virtualCardsToTravel: travelMagnitudePx / cardStepPx,
   }
 }
@@ -152,7 +187,8 @@ export function calculateSpinOutcome(input: SpinCalculationInput): SpinCalculati
     -config.randomJitterCards,
     config.randomJitterCards,
   )
-  const inertialPositionPx = input.currentPositionPx + inertialProjection.travelPx
+  const coastPositionPx = input.currentPositionPx + inertialProjection.coastTravelPx
+  const inertialPositionPx = coastPositionPx + inertialProjection.decelerationTravelPx
   const rawFinalPositionPx = inertialPositionPx + direction * jitterCards * input.cardStepPx
   const finalPositionPx = snapPositionToCard(rawFinalPositionPx, input.cardStepPx)
   const snapDistancePx = finalPositionPx - inertialPositionPx
@@ -166,14 +202,18 @@ export function calculateSpinOutcome(input: SpinCalculationInput): SpinCalculati
 
   return {
     kind: 'spin',
+    coastPositionPx,
     inertialPositionPx,
     finalPositionPx,
+    coastDurationMs: inertialProjection.coastDurationMs,
+    decelerationDurationMs: inertialProjection.decelerationDurationMs,
     inertialDurationMs: inertialProjection.durationMs,
     snapDurationMs,
     durationMs: inertialProjection.durationMs + snapDurationMs,
     projectedTravelPx: inertialProjection.travelPx,
     finalSnapDistancePx: snapDistancePx,
     clampedReleaseVelocityPxPerSec: inertialProjection.clampedReleaseVelocityPxPerSec,
+    safetyClampApplied: inertialProjection.safetyClampApplied,
     virtualCardsToTravel: inertialProjection.virtualCardsToTravel,
   }
 }

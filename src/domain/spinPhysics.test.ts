@@ -58,21 +58,32 @@ describe('spin physics', () => {
     expect(result.finalPositionPx % 124).toBe(0)
   })
 
-  it('projects inertial travel from measured release velocity', () => {
-    const slow = projectInertialTravelPx(600, 100)
-    const fast = projectInertialTravelPx(1200, 100)
+  it('projects clearly increasing travel from weak valid, medium, and strong releases', () => {
+    const weakValid = projectInertialTravelPx(360, 100)
+    const medium = projectInertialTravelPx(1200, 100)
+    const strong = projectInertialTravelPx(2600, 100)
 
-    expect(fast.travelPx).toBeGreaterThan(slow.travelPx)
-    expect(fast.durationMs).toBeGreaterThan(slow.durationMs)
-    expect(slow.clampedReleaseVelocityPxPerSec).toBe(600)
-    expect(fast.clampedReleaseVelocityPxPerSec).toBe(1200)
+    expect(medium.virtualCardsToTravel).toBeGreaterThan(weakValid.virtualCardsToTravel * 5)
+    expect(strong.virtualCardsToTravel).toBeGreaterThan(medium.virtualCardsToTravel * 3)
+    expect(weakValid.safetyClampApplied).toBe(false)
+    expect(medium.safetyClampApplied).toBe(false)
   })
 
-  it('keeps inertial duration consistent with release velocity', () => {
-    const projected = projectInertialTravelPx(900, 100)
-    const initialCssSpeedPxPerSec = (2 * Math.abs(projected.travelPx) * 1000) / projected.durationMs
+  it('gives stronger releases a longer coast and duration', () => {
+    const weakValid = projectInertialTravelPx(360, 100)
+    const strong = projectInertialTravelPx(2600, 100)
 
-    expect(initialCssSpeedPxPerSec).toBeCloseTo(900, -1)
+    expect(strong.coastDurationMs).toBeGreaterThan(weakValid.coastDurationMs)
+    expect(strong.durationMs).toBeGreaterThan(weakValid.durationMs)
+    expect(strong.clampedReleaseVelocityPxPerSec).toBe(2600)
+  })
+
+  it('does not clamp ordinary strong releases below the higher safety ceiling', () => {
+    const projected = projectInertialTravelPx(3500, 100)
+
+    expect(projected.clampedReleaseVelocityPxPerSec).toBe(3500)
+    expect(projected.coastDurationMs).toBeGreaterThan(defaultSpinPhysicsConfig.minCoastMs)
+    expect(defaultSpinPhysicsConfig.maxReleaseVelocityPxPerSec).toBe(4200)
   })
 
   it('uses swipe direction for final travel direction', () => {
@@ -114,6 +125,7 @@ describe('spin physics', () => {
     expect(result.clampedReleaseVelocityPxPerSec).toBe(
       defaultSpinPhysicsConfig.maxReleaseVelocityPxPerSec,
     )
+    expect(result.safetyClampApplied).toBe(true)
   })
 
   it('snaps positions by card step', () => {

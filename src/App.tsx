@@ -108,6 +108,7 @@ const numberSettingControls: Array<{
   { key: 'cardBorderRadiusPx', label: 'Скругление карточки', unit: 'px' },
 ]
 const snapTransitionEasing = 'cubic-bezier(0.12, 0.72, 0.12, 1)'
+const coastTransitionEasing = 'linear'
 const spinTransitionEasing = 'cubic-bezier(0.25, 0.5, 0.35, 1)'
 const afterResultBehaviorOptions: Array<{
   value: WheelSettings['afterResultBehavior']
@@ -792,14 +793,20 @@ function SpinScreen({
   }
 
   function animateSpinTo({
+    coastPositionPx,
     inertialPositionPx,
     finalPositionPx,
+    coastDurationMs,
+    decelerationDurationMs,
     inertialDurationMs,
     snapDurationMs,
     result,
   }: {
+    coastPositionPx: number
     inertialPositionPx: number
     finalPositionPx: number
+    coastDurationMs: number
+    decelerationDurationMs: number
     inertialDurationMs: number
     snapDurationMs: number
     result: WheelOption
@@ -811,41 +818,61 @@ function SpinScreen({
     pendingResultRef.current = result
     pendingFinalPositionRef.current = finalPositionPx
     setIsAnimating(true)
-    setTransitionMs(inertialDurationMs)
-    setTransitionEasing(spinTransitionEasing)
-    setPositionPx(inertialPositionPx)
+    setTransitionMs(coastDurationMs)
+    setTransitionEasing(coastTransitionEasing)
+    setPositionPx(coastPositionPx)
     startFrameSampling({
       fromPositionPx: positionRef.current,
-      toPositionPx: inertialPositionPx,
-      durationMs: inertialDurationMs,
-      phase: 'deceleration',
+      toPositionPx: coastPositionPx,
+      durationMs: coastDurationMs,
+      phase: 'coast',
     })
     debugLogger.log('spin', 'animation_start', {
+      coastPositionPx,
       inertialPositionPx,
       finalPositionPx,
+      coastDurationMs,
+      decelerationDurationMs,
       inertialDurationMs,
       snapDurationMs,
       hasResult: true,
     })
     animationTimerRef.current = window.setTimeout(() => {
-      setTransitionMs(snapDurationMs)
-      setTransitionEasing(snapTransitionEasing)
-      setPositionPx(finalPositionPx)
+      setTransitionMs(decelerationDurationMs)
+      setTransitionEasing(spinTransitionEasing)
+      setPositionPx(inertialPositionPx)
       startFrameSampling({
-        fromPositionPx: inertialPositionPx,
-        toPositionPx: finalPositionPx,
-        durationMs: snapDurationMs,
-        phase: 'final-snap',
+        fromPositionPx: coastPositionPx,
+        toPositionPx: inertialPositionPx,
+        durationMs: decelerationDurationMs,
+        phase: 'deceleration',
       })
-      debugLogger.log('spin', 'final_snap_start', {
+      debugLogger.log('spin', 'deceleration_start', {
+        coastPositionPx,
         inertialPositionPx,
-        finalPositionPx,
-        snapDistancePx: finalPositionPx - inertialPositionPx,
-        snapDurationMs,
+        decelerationDurationMs,
         result: getOptionSummary(result),
       })
-      animationTimerRef.current = window.setTimeout(finishAnimation, snapDurationMs + 40)
-    }, inertialDurationMs + 40)
+      animationTimerRef.current = window.setTimeout(() => {
+        setTransitionMs(snapDurationMs)
+        setTransitionEasing(snapTransitionEasing)
+        setPositionPx(finalPositionPx)
+        startFrameSampling({
+          fromPositionPx: inertialPositionPx,
+          toPositionPx: finalPositionPx,
+          durationMs: snapDurationMs,
+          phase: 'final-snap',
+        })
+        debugLogger.log('spin', 'final_snap_start', {
+          inertialPositionPx,
+          finalPositionPx,
+          snapDistancePx: finalPositionPx - inertialPositionPx,
+          snapDurationMs,
+          result: getOptionSummary(result),
+        })
+        animationTimerRef.current = window.setTimeout(finishAnimation, snapDurationMs + 40)
+      }, decelerationDurationMs + 40)
+    }, coastDurationMs + 40)
   }
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -975,9 +1002,15 @@ function SpinScreen({
           })
         : undefined
     const finalPositionPx = adjustedLanding?.positionPx ?? outcome.finalPositionPx
+    const landingAdjustmentPx =
+      outcome.kind === 'spin' ? finalPositionPx - outcome.finalPositionPx : 0
+    const coastPositionPx =
+      outcome.kind === 'spin'
+        ? outcome.coastPositionPx + landingAdjustmentPx
+        : outcome.finalPositionPx
     const inertialPositionPx =
       outcome.kind === 'spin'
-        ? outcome.inertialPositionPx + finalPositionPx - outcome.finalPositionPx
+        ? outcome.inertialPositionPx + landingAdjustmentPx
         : outcome.finalPositionPx
     const finalSnapDistancePx =
       outcome.kind === 'spin'
@@ -1068,8 +1101,10 @@ function SpinScreen({
                 outcome.clampedReleaseVelocityPxPerSec !== releaseVelocityPxPerSec,
             },
             projectedTravelDistancePx: outcome.projectedTravelPx,
+            projectedTravelCards: outcome.virtualCardsToTravel,
             actualAnimatedTravelDistancePx: finalPositionPx - releasePositionPx,
-            decelerationDurationMs: outcome.inertialDurationMs,
+            coastDurationMs: outcome.coastDurationMs,
+            decelerationDurationMs: outcome.decelerationDurationMs,
             totalSpinDurationMs: outcome.inertialDurationMs + snapDurationMs,
             finalSnapDistancePx,
             finalPositionBeforeSnapPx: inertialPositionPx,
@@ -1082,6 +1117,7 @@ function SpinScreen({
             selectedResult: getTelemetryOptionSummary(result, adjustedLanding?.index ?? rawCandidateIndex),
             candidateWasExcluded,
             adjustedDueToExclusion: candidateWasExcluded,
+            safetyClampApplied: outcome.safetyClampApplied,
           },
         })
       }
@@ -1105,8 +1141,11 @@ function SpinScreen({
 
     if (outcome.kind === 'spin' && result) {
       animateSpinTo({
+        coastPositionPx,
         inertialPositionPx,
         finalPositionPx,
+        coastDurationMs: outcome.coastDurationMs,
+        decelerationDurationMs: outcome.decelerationDurationMs,
         inertialDurationMs: outcome.inertialDurationMs,
         snapDurationMs,
         result,

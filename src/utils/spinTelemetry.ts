@@ -55,6 +55,7 @@ export type SpinTelemetryReport = {
       wasClamped: boolean
     }
     projectedTravelDistancePx: number
+    projectedTravelCards: number
     actualAnimatedTravelDistancePx: number
     coastDurationMs?: number
     decelerationDurationMs: number
@@ -67,6 +68,7 @@ export type SpinTelemetryReport = {
     selectedResult?: SpinTelemetryOptionSummary
     candidateWasExcluded: boolean
     adjustedDueToExclusion: boolean
+    safetyClampApplied: boolean
   }
 }
 
