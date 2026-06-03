@@ -5,7 +5,7 @@ import {
   decodeShareConfig,
   encodeShareConfig,
   readShareConfigFromHash,
-  stripImagesFromConfig,
+  stripLocalImagesFromShareConfig,
 } from './shareConfig'
 import type { WheelConfig } from './types'
 
@@ -62,10 +62,34 @@ describe('share config serialization', () => {
     expect(decoded.value.wheel.options[0].subtitle).toBe('кириллица, emoji и спецсимволы: Привет & <3')
   })
 
-  it('strips data and URL images from shared configs', () => {
-    const stripped = stripImagesFromConfig(configWithUnicodeAndImages())
+  it('preserves URL images and strips data images from shared configs', () => {
+    const stripped = stripLocalImagesFromShareConfig(configWithUnicodeAndImages())
 
-    expect(stripped.wheel.options.every((option) => option.image === undefined)).toBe(true)
+    expect(stripped.wheel.options[0].image).toBeUndefined()
+    expect(stripped.wheel.options[1].image).toEqual({
+      kind: 'url',
+      value: 'https://example.com/image.webp',
+    })
+  })
+
+  it('round-trips URL images but not data images through share links', () => {
+    const encoded = encodeShareConfig(configWithUnicodeAndImages())
+    expect(encoded.ok).toBe(true)
+    if (!encoded.ok) {
+      return
+    }
+
+    const decoded = decodeShareConfig(encoded.value)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) {
+      return
+    }
+
+    expect(decoded.value.wheel.options[0].image).toBeUndefined()
+    expect(decoded.value.wheel.options[1].image).toEqual({
+      kind: 'url',
+      value: 'https://example.com/image.webp',
+    })
   })
 
   it('keeps exclusion behavior rules in shared configs', () => {
@@ -90,7 +114,7 @@ describe('share config serialization', () => {
         ),
       },
     }
-    const stripped = stripImagesFromConfig(config)
+    const stripped = stripLocalImagesFromShareConfig(config)
 
     expect(stripped.wheel.settings.afterResultBehavior).toBe('ask')
     expect(stripped.wheel.settings.excludedOptionDisplayMode).toBe('show-disabled')
@@ -100,7 +124,7 @@ describe('share config serialization', () => {
     expect('excludedOptions' in stripped).toBe(false)
   })
 
-  it('does not restore images after decoding a shared config', () => {
+  it('does not restore data images after decoding a shared config', () => {
     const encoded = encodeShareConfig(configWithUnicodeAndImages())
     expect(encoded.ok).toBe(true)
     if (!encoded.ok) {
@@ -113,7 +137,11 @@ describe('share config serialization', () => {
       return
     }
 
-    expect(decoded.value.wheel.options.every((option) => option.image === undefined)).toBe(true)
+    expect(decoded.value.wheel.options[0].image).toBeUndefined()
+    expect(decoded.value.wheel.options[1].image).toEqual({
+      kind: 'url',
+      value: 'https://example.com/image.webp',
+    })
   })
 
   it('rejects invalid wheel hash payloads', () => {

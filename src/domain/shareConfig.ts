@@ -27,7 +27,11 @@ function binaryStringToBytes(value: string): Uint8Array {
   return bytes
 }
 
-function stripOptionImage(option: WheelOption): WheelOption {
+function stripLocalImageFromOption(option: WheelOption): WheelOption {
+  if (option.image?.kind === 'url') {
+    return { ...option, image: { ...option.image } }
+  }
+
   return {
     id: option.id,
     title: option.title,
@@ -40,18 +44,18 @@ function stripOptionImage(option: WheelOption): WheelOption {
   }
 }
 
-export function stripImagesFromConfig(config: WheelConfig): WheelConfig {
+export function stripLocalImagesFromShareConfig(config: WheelConfig): WheelConfig {
   return {
     ...config,
     wheel: {
       ...config.wheel,
-      options: config.wheel.options.map(stripOptionImage),
+      options: config.wheel.options.map(stripLocalImageFromOption),
     },
   }
 }
 
 export function encodeShareConfig(config: WheelConfig): ValidationResult<string> {
-  const shareConfig = stripImagesFromConfig(config)
+  const shareConfig = stripLocalImagesFromShareConfig(config)
   const json = JSON.stringify(shareConfig)
   const utf8Binary = bytesToBinaryString(textEncoder.encode(json))
   const compressed = compressToUint8Array(utf8Binary)

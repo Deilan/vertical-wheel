@@ -2201,7 +2201,7 @@ function App() {
         setMode('spin')
         setStatusMessage({
           kind: 'success',
-          text: 'Барабан из ссылки загружен. Картинки не входят в ссылку.',
+          text: 'Барабан из ссылки загружен. URL-картинки сохранены, локальные не входят в ссылку.',
         })
         setIsConfigLoaded(true)
         return
@@ -2368,7 +2368,10 @@ function App() {
       debugLogger.log('share', 'copy_success', {
         shareUrl: shareUrl.value,
       })
-      setStatusMessage({ kind: 'success', text: 'Ссылка скопирована. Картинки не входят в ссылку.' })
+      setStatusMessage({
+        kind: 'success',
+        text: 'Ссылка скопирована. URL-картинки сохранены, локальные не входят в ссылку.',
+      })
     } catch (error) {
       debugLogger.log('share', 'copy_error', {
         error: error instanceof Error ? error.message : 'unknown_error',

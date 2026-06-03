@@ -42,7 +42,7 @@
 
 `src/domain/winningOption.ts` определяет выигравшую опцию по смещению и шагу карточки.
 
-`src/domain/shareConfig.ts` сериализует share config: удаляет картинки, кодирует Unicode-safe JSON, сжимает через `lz-string`, кодирует в base64url и читает `#wheel=...`.
+`src/domain/shareConfig.ts` сериализует share config: удаляет локальные data/base64 картинки, сохраняет image URL, кодирует Unicode-safe JSON, сжимает через `lz-string`, кодирует в base64url и читает `#wheel=...`.
 
 `src/domain/optionExclusion.ts` содержит чистую логику временного исключения опций из будущих вращений:
 
@@ -82,7 +82,7 @@
 
 1. В Edit mode пользователь нажимает «Скопировать ссылку».
 2. `createShareHash` вызывает `encodeShareConfig`.
-3. `stripImagesFromConfig` удаляет все `image` поля, включая data images и URL images.
+3. `stripLocalImagesFromShareConfig` удаляет локальные data/base64 images, но сохраняет URL images.
 4. JSON кодируется через UTF-8, сжимается `lz-string`, превращается в base64url.
 5. В URL кладется hash вида `#wheel=...`.
 6. История не участвует в сериализации.
