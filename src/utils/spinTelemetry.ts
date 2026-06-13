@@ -18,6 +18,22 @@ export type SpinTelemetryOptionSummary = {
   id: string
   title: string
   index?: number
+  originalIndex?: number
+  visibleIndex?: number
+  active?: boolean
+  excluded?: boolean
+  excludedDisplayMode?: 'hide' | 'show-disabled'
+  positionPx?: number
+}
+
+export type SpinTelemetryVisibleOptionSummary = {
+  id: string
+  title: string
+  originalIndex: number
+  visibleIndex: number
+  active: boolean
+  excluded: boolean
+  excludedDisplayMode?: 'hide' | 'show-disabled'
 }
 
 export type SpinTelemetryReport = {
@@ -36,6 +52,12 @@ export type SpinTelemetryReport = {
   visibleOptionCount: number
   activeOptionCount: number
   excludedOptionCount: number
+  excludedDisplayStateSummary?: {
+    hidden: number
+    showDisabled: number
+  }
+  visibleOptionOrder?: SpinTelemetryVisibleOptionSummary[]
+  activeOptionIdsInVisibleOrder?: string[]
   thresholds: {
     minDragDistancePx: number
     minReleaseVelocityPxPerSec: number
@@ -61,13 +83,33 @@ export type SpinTelemetryReport = {
     decelerationDurationMs: number
     totalSpinDurationMs: number
     finalSnapDistancePx: number
+    finalSnapDistanceCards?: number
+    finalSnapWasLarge?: boolean
     finalPositionBeforeSnapPx: number
     finalSnappedPositionPx: number
     rawLandingCandidate?: SpinTelemetryOptionSummary
+    rawPhysicalLandingCandidate?: SpinTelemetryOptionSummary
+    rawLandingCandidateExcluded?: boolean
     adjustedEligibleOption?: SpinTelemetryOptionSummary
     selectedResult?: SpinTelemetryOptionSummary
     candidateWasExcluded: boolean
     adjustedDueToExclusion: boolean
+    eligibilityAdjustmentApplied?: boolean
+    eligibilityAdjustmentReason?:
+      | 'none'
+      | 'candidate-excluded'
+      | 'no-eligible-options'
+      | 'active-count-too-low'
+    eligibilityAdjustmentDirection?: 'forward' | 'backward' | 'none'
+    eligibilityExtensionCards?: number
+    eligibilityExtensionPx?: number
+    projectedPositionBeforeEligibilityAdjustmentPx?: number
+    projectedPositionAfterEligibilityAdjustmentPx?: number
+    positionBeforeFinalSnapPx?: number
+    totalTravelBeforeEligibilityExtensionPx?: number
+    totalTravelAfterEligibilityExtensionPx?: number
+    totalDurationBeforeEligibilityExtensionMs?: number
+    totalDurationAfterEligibilityExtensionMs?: number
     safetyClampApplied: boolean
   }
 }

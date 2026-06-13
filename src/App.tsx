@@ -67,6 +67,7 @@ import type {
   SpinTelemetryOptionSummary,
   SpinTelemetryPointerSample,
   SpinTelemetryReport,
+  SpinTelemetryVisibleOptionSummary,
 } from './utils/spinTelemetry'
 import styles from './App.module.css'
 
@@ -237,6 +238,14 @@ function getOptionSummary(option: WheelOption) {
 function getTelemetryOptionSummary(
   option: WheelOption | undefined,
   index?: number,
+  metadata?: {
+    originalIndex?: number
+    visibleIndex?: number
+    active?: boolean
+    excluded?: boolean
+    excludedDisplayMode?: ExcludedOptionDisplayMode
+    positionPx?: number
+  },
 ): SpinTelemetryOptionSummary | undefined {
   if (!option) {
     return undefined
@@ -246,7 +255,34 @@ function getTelemetryOptionSummary(
     id: option.id,
     title: option.title,
     index,
+    ...metadata,
   }
+}
+
+function getVisibleOptionTelemetry({
+  allOptions,
+  visibleOptions,
+  sessionState,
+}: {
+  allOptions: WheelOption[]
+  visibleOptions: WheelOption[]
+  sessionState: WheelSessionState
+}): SpinTelemetryVisibleOptionSummary[] {
+  const originalIndexById = new Map(allOptions.map((option, index) => [option.id, index]))
+
+  return visibleOptions.map((option, visibleIndex) => {
+    const excludedDisplayMode = getExcludedOptionDisplayMode(option.id, sessionState)
+
+    return {
+      id: option.id,
+      title: option.title,
+      originalIndex: originalIndexById.get(option.id) ?? -1,
+      visibleIndex,
+      active: excludedDisplayMode === undefined,
+      excluded: excludedDisplayMode !== undefined,
+      excludedDisplayMode,
+    }
+  })
 }
 
 function getHistorySummary(history: WheelHistory) {
@@ -979,6 +1015,23 @@ function SpinScreen({
       positionPx: releasePositionPx,
       instantaneousVelocityPxPerSec: releaseVelocityPxPerSec,
     })
+    const visibleOptionOrder = getVisibleOptionTelemetry({
+      allOptions: config.wheel.options,
+      visibleOptions,
+      sessionState,
+    })
+    const visibleOptionTelemetryById = new Map(
+      visibleOptionOrder.map((option) => [option.id, option]),
+    )
+    const activeOptionIdsInVisibleOrder = visibleOptionOrder
+      .filter((option) => option.active)
+      .map((option) => option.id)
+    const excludedDisplayStateSummary = {
+      hidden: sessionState.excludedOptions.filter((option) => option.displayMode === 'hide').length,
+      showDisabled: sessionState.excludedOptions.filter(
+        (option) => option.displayMode === 'show-disabled',
+      ).length,
+    }
     debugLogger.log('spin', 'pointer_up', {
       pointerType: event.pointerType,
       dragDistancePx,
@@ -993,6 +1046,9 @@ function SpinScreen({
         excludedCount: excludedOptionCount,
         dragDistancePx,
         releaseVelocityPxPerSec,
+        reason: 'active-count-too-low',
+        resultUpdated: false,
+        historyUpdated: false,
       })
 
       if (debugLogger.isEnabled()) {
@@ -1011,6 +1067,9 @@ function SpinScreen({
             visibleOptionCount: visibleOptions.length,
             activeOptionCount,
             excludedOptionCount,
+            excludedDisplayStateSummary,
+            visibleOptionOrder,
+            activeOptionIdsInVisibleOrder,
             thresholds: {
               minDragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
               minReleaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
@@ -1049,15 +1108,21 @@ function SpinScreen({
           })
         : undefined
     const finalPositionPx = adjustedLanding?.positionPx ?? outcome.finalPositionPx
-    const landingAdjustmentPx =
-      outcome.kind === 'spin' ? finalPositionPx - outcome.finalPositionPx : 0
+    const eligibilityExtensionPx =
+      outcome.kind === 'spin' ? adjustedLanding?.extensionPx ?? 0 : 0
+    const eligibilityExtensionCards =
+      outcome.kind === 'spin' ? Math.abs(eligibilityExtensionPx / cardStepPx) : 0
+    const eligibilityExtensionDurationMs =
+      outcome.kind === 'spin'
+        ? Math.round(clampNumber(eligibilityExtensionCards * 90, 0, 420))
+        : 0
     const coastPositionPx =
       outcome.kind === 'spin'
-        ? outcome.coastPositionPx + landingAdjustmentPx
+        ? outcome.coastPositionPx
         : outcome.finalPositionPx
     const inertialPositionPx =
       outcome.kind === 'spin'
-        ? outcome.inertialPositionPx + landingAdjustmentPx
+        ? outcome.inertialPositionPx + eligibilityExtensionPx
         : outcome.finalPositionPx
     const finalSnapDistancePx =
       outcome.kind === 'spin'
@@ -1080,13 +1145,42 @@ function SpinScreen({
         : undefined
     const rawCandidateIndex =
       outcome.kind === 'spin'
-        ? getWinningOptionIndex(outcome.finalPositionPx, cardStepPx, visibleOptions.length)
+        ? adjustedLanding?.candidateIndex ??
+          getWinningOptionIndex(outcome.finalPositionPx, cardStepPx, visibleOptions.length)
         : undefined
     const rawCandidate =
-      rawCandidateIndex === undefined ? undefined : visibleOptions[rawCandidateIndex]
+      adjustedLanding?.candidateOption ??
+      (rawCandidateIndex === undefined ? undefined : visibleOptions[rawCandidateIndex])
     const candidateWasExcluded = rawCandidate
-      ? getExcludedOptionDisplayMode(rawCandidate.id, sessionState) !== undefined
+      ? adjustedLanding?.candidateWasExcluded ??
+        getExcludedOptionDisplayMode(rawCandidate.id, sessionState) !== undefined
       : false
+    const rawCandidateTelemetry = rawCandidate
+      ? visibleOptionTelemetryById.get(rawCandidate.id)
+      : undefined
+    const adjustedTelemetry = adjustedLanding
+      ? visibleOptionTelemetryById.get(adjustedLanding.option.id)
+      : result
+        ? visibleOptionTelemetryById.get(result.id)
+        : undefined
+    const eligibilityAdjustmentReason =
+      outcome.kind !== 'spin'
+        ? 'none'
+        : adjustedLanding
+          ? candidateWasExcluded
+            ? 'candidate-excluded'
+            : 'none'
+          : activeOptionCount < 2
+            ? 'active-count-too-low'
+            : 'no-eligible-options'
+    const eligibilityAdjustmentDirection =
+      outcome.kind === 'spin' && eligibilityExtensionPx !== 0
+        ? spinDirection >= 0
+          ? 'forward'
+          : 'backward'
+        : 'none'
+    const finalSnapDistanceCards =
+      outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
 
     if (debugLogger.isEnabled()) {
       if (outcome.kind === 'snap') {
@@ -1105,6 +1199,9 @@ function SpinScreen({
             visibleOptionCount: visibleOptions.length,
             activeOptionCount,
             excludedOptionCount,
+            excludedDisplayStateSummary,
+            visibleOptionOrder,
+            activeOptionIdsInVisibleOrder,
             thresholds: {
               minDragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
               minReleaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
@@ -1151,19 +1248,55 @@ function SpinScreen({
             projectedTravelCards: outcome.virtualCardsToTravel,
             actualAnimatedTravelDistancePx: finalPositionPx - releasePositionPx,
             coastDurationMs: outcome.coastDurationMs,
-            decelerationDurationMs: outcome.decelerationDurationMs,
-            totalSpinDurationMs: outcome.inertialDurationMs + snapDurationMs,
+            decelerationDurationMs: outcome.decelerationDurationMs + eligibilityExtensionDurationMs,
+            totalSpinDurationMs:
+              outcome.inertialDurationMs + eligibilityExtensionDurationMs + snapDurationMs,
             finalSnapDistancePx,
+            finalSnapDistanceCards,
+            finalSnapWasLarge: finalSnapDistanceCards !== undefined && finalSnapDistanceCards > 0.5,
             finalPositionBeforeSnapPx: inertialPositionPx,
             finalSnappedPositionPx: finalPositionPx,
-            rawLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex),
+            rawLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex, {
+              ...rawCandidateTelemetry,
+              positionPx: adjustedLanding?.candidatePositionPx ?? outcome.finalPositionPx,
+            }),
+            rawPhysicalLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex, {
+              ...rawCandidateTelemetry,
+              positionPx: adjustedLanding?.candidatePositionPx ?? outcome.finalPositionPx,
+            }),
+            rawLandingCandidateExcluded: candidateWasExcluded,
             adjustedEligibleOption: getTelemetryOptionSummary(
               adjustedLanding?.option ?? result,
               adjustedLanding?.index ?? rawCandidateIndex,
+              {
+                ...adjustedTelemetry,
+                positionPx: finalPositionPx,
+              },
             ),
-            selectedResult: getTelemetryOptionSummary(result, adjustedLanding?.index ?? rawCandidateIndex),
+            selectedResult: getTelemetryOptionSummary(
+              result,
+              adjustedLanding?.index ?? rawCandidateIndex,
+              {
+                ...adjustedTelemetry,
+                positionPx: finalPositionPx,
+              },
+            ),
             candidateWasExcluded,
             adjustedDueToExclusion: candidateWasExcluded,
+            eligibilityAdjustmentApplied: eligibilityExtensionPx !== 0,
+            eligibilityAdjustmentReason,
+            eligibilityAdjustmentDirection,
+            eligibilityExtensionCards,
+            eligibilityExtensionPx,
+            projectedPositionBeforeEligibilityAdjustmentPx:
+              adjustedLanding?.candidatePositionPx ?? outcome.finalPositionPx,
+            projectedPositionAfterEligibilityAdjustmentPx: finalPositionPx,
+            positionBeforeFinalSnapPx: inertialPositionPx,
+            totalTravelBeforeEligibilityExtensionPx: outcome.finalPositionPx - releasePositionPx,
+            totalTravelAfterEligibilityExtensionPx: finalPositionPx - releasePositionPx,
+            totalDurationBeforeEligibilityExtensionMs: outcome.durationMs,
+            totalDurationAfterEligibilityExtensionMs:
+              outcome.inertialDurationMs + eligibilityExtensionDurationMs + snapDurationMs,
             safetyClampApplied: outcome.safetyClampApplied,
           },
         })
@@ -1192,8 +1325,8 @@ function SpinScreen({
         inertialPositionPx,
         finalPositionPx,
         coastDurationMs: outcome.coastDurationMs,
-        decelerationDurationMs: outcome.decelerationDurationMs,
-        inertialDurationMs: outcome.inertialDurationMs,
+        decelerationDurationMs: outcome.decelerationDurationMs + eligibilityExtensionDurationMs,
+        inertialDurationMs: outcome.inertialDurationMs + eligibilityExtensionDurationMs,
         snapDurationMs,
         result,
       })

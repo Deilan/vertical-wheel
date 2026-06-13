@@ -211,6 +211,46 @@ describe('option exclusion domain logic', () => {
     expect(adjusted?.index).toBe(3)
     expect(adjusted?.positionPx).toBe(300)
     expect(adjusted?.option.id).toBe(options[3].id)
+    expect(adjusted?.candidateIndex).toBe(1)
+    expect(adjusted?.candidateOption.id).toBe(options[1].id)
+    expect(adjusted?.candidatePositionPx).toBe(100)
+    expect(adjusted?.candidateWasExcluded).toBe(true)
+    expect(adjusted?.extensionCards).toBe(2)
+    expect(adjusted?.extensionPx).toBe(200)
+  })
+
+  it('does not apply an eligibility extension when snapped landing candidate is active', () => {
+    const options = demoWheelConfig.wheel.options
+    const adjusted = adjustLandingPositionToEligibleOption({
+      options,
+      sessionState: createSession([{ optionId: options[1].id, displayMode: 'show-disabled' }]),
+      candidatePositionPx: 200,
+      cardStepPx: 100,
+      spinDirection: 1,
+    })
+
+    expect(adjusted?.index).toBe(2)
+    expect(adjusted?.positionPx).toBe(200)
+    expect(adjusted?.candidateWasExcluded).toBe(false)
+    expect(adjusted?.extensionCards).toBe(0)
+    expect(adjusted?.extensionPx).toBe(0)
+  })
+
+  it('keeps hidden excluded options out of the visible landing track', () => {
+    const options = demoWheelConfig.wheel.options
+    const sessionState = createSession([{ optionId: options[1].id, displayMode: 'hide' }])
+    const visibleOptions = getVisibleOptions(options, sessionState)
+    const adjusted = adjustLandingPositionToEligibleOption({
+      options: visibleOptions,
+      sessionState,
+      candidatePositionPx: 100,
+      cardStepPx: 100,
+      spinDirection: 1,
+    })
+
+    expect(visibleOptions.some((option) => option.id === options[1].id)).toBe(false)
+    expect(adjusted?.candidateWasExcluded).toBe(false)
+    expect(adjusted?.option.id).toBe(visibleOptions[1].id)
   })
 
   it('reconciles excluded session state for config fingerprint and option ids', () => {

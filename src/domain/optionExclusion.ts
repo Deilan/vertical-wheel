@@ -256,7 +256,17 @@ export function adjustLandingPositionToEligibleOption({
   candidatePositionPx: number
   cardStepPx: number
   spinDirection: number
-}): { positionPx: number; index: number; option: WheelOption } | undefined {
+}): {
+  positionPx: number
+  index: number
+  option: WheelOption
+  candidateIndex: number
+  candidateOption: WheelOption
+  candidatePositionPx: number
+  candidateWasExcluded: boolean
+  extensionCards: number
+  extensionPx: number
+} | undefined {
   if (cardStepPx <= 0) {
     throw new Error('Шаг карточки должен быть положительным.')
   }
@@ -267,6 +277,8 @@ export function adjustLandingPositionToEligibleOption({
 
   const direction = spinDirection >= 0 ? 1 : -1
   const candidateVirtualIndex = Math.round(candidatePositionPx / cardStepPx)
+  const candidateIndex = ((candidateVirtualIndex % options.length) + options.length) % options.length
+  const candidateOption = options[candidateIndex]
 
   for (let offset = 0; offset < options.length; offset += 1) {
     const virtualIndex = candidateVirtualIndex + direction * offset
@@ -274,10 +286,18 @@ export function adjustLandingPositionToEligibleOption({
     const option = options[index]
 
     if (!isOptionExcluded(option.id, sessionState)) {
+      const adjustedPositionPx = virtualIndex * cardStepPx
+
       return {
-        positionPx: virtualIndex * cardStepPx,
+        positionPx: adjustedPositionPx,
         index,
         option,
+        candidateIndex,
+        candidateOption,
+        candidatePositionPx: candidateVirtualIndex * cardStepPx,
+        candidateWasExcluded: isOptionExcluded(candidateOption.id, sessionState),
+        extensionCards: offset,
+        extensionPx: adjustedPositionPx - candidateVirtualIndex * cardStepPx,
       }
     }
   }
