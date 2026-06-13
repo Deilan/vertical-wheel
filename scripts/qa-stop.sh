@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 RUNTIME_DIR=".qa-runtime"
 VITE_PID_FILE="$RUNTIME_DIR/vite.pid"

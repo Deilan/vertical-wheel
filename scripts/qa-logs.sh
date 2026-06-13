@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 RUNTIME_DIR=".qa-runtime"
 VITE_LOG="$RUNTIME_DIR/vite.log"

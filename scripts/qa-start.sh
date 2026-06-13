@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 RUNTIME_DIR=".qa-runtime"
 VITE_PID_FILE="$RUNTIME_DIR/vite.pid"
@@ -34,6 +34,13 @@ cloudflare_url() {
 }
 
 mkdir -p "$RUNTIME_DIR"
+
+if ! is_running "$CLOUDFLARED_PID_FILE" && ! command -v cloudflared >/dev/null 2>&1; then
+  echo "cloudflared is not installed or is not in PATH."
+  echo "Install cloudflared, then run npm run qa:start again."
+  echo "Local Vite was not started by this command."
+  exit 1
+fi
 
 if is_running "$VITE_PID_FILE"; then
   echo "Vite already running with PID $(cat "$VITE_PID_FILE")."

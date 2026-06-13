@@ -93,7 +93,7 @@ npm run tunnel:cloudflare
 npm run qa:start
 ```
 
-Команда стартует Vite на фиксированном порту `5173`, запускает `cloudflared tunnel --protocol http2 --url http://localhost:5173`, пишет PID-файлы и логи в `.qa-runtime/`, а затем печатает Cloudflare URL, если он уже появился в логе. URL Cloudflare остается стабильным, пока работает тот же процесс `cloudflared`; при новом запуске tunnel будет создан новый URL.
+Команда стартует Vite на фиксированном порту `5173`, запускает `cloudflared tunnel --protocol http2 --url http://localhost:5173`, пишет PID-файлы и логи в `.qa-runtime/`, а затем печатает Cloudflare URL, если он уже появился в логе. Для `qa:start` нужен установленный `cloudflared`; если команды нет в `PATH`, скрипт объяснит проблему и не начнет частичный запуск. URL Cloudflare остается стабильным, пока работает тот же процесс `cloudflared`; при новом запуске tunnel будет создан новый URL.
 
 Проверить состояние:
 
@@ -113,7 +113,7 @@ npm run qa:logs
 npm run qa:stop
 ```
 
-Логи сохраняются после остановки:
+`.qa-runtime/` содержит только сгенерированные PID-файлы и логи, игнорируется Git и не коммитится. Логи сохраняются после остановки:
 
 - `.qa-runtime/vite.log`
 - `.qa-runtime/cloudflared.log`
