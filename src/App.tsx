@@ -62,6 +62,14 @@ import {
   appendBoundedPointerSample,
   createSpinTelemetryReport,
 } from './utils/spinTelemetry'
+import {
+  createDebugLogExport,
+  createDiagnosticsBundle,
+  createDownloadFileName,
+  createLocationSummary,
+  createSpinReportsExport,
+  downloadJsonFile,
+} from './utils/diagnosticsExport'
 import type {
   SpinTelemetryFrameSample,
   SpinTelemetryOptionSummary,
@@ -2179,6 +2187,9 @@ function DebugPanel({
   onCopy,
   onCopyAllSpinReports,
   onCopyLastSpinReport,
+  onDownloadBundle,
+  onDownloadDebugLog,
+  onDownloadSpinReports,
 }: {
   events: ReturnType<typeof debugLogger.getEvents>
   spinReports: ReturnType<typeof debugLogger.getSpinReports>
@@ -2187,6 +2198,9 @@ function DebugPanel({
   onCopy: () => void
   onCopyAllSpinReports: () => void
   onCopyLastSpinReport: () => void
+  onDownloadBundle: () => void
+  onDownloadDebugLog: () => void
+  onDownloadSpinReports: () => void
 }) {
   const recentEvents = events.slice(-20).reverse()
 
@@ -2200,8 +2214,14 @@ function DebugPanel({
         <button type="button" onClick={onCopy}>
           Скопировать лог
         </button>
+        <button type="button" onClick={onDownloadDebugLog}>
+          Скачать лог
+        </button>
         <button type="button" onClick={onClear}>
           Очистить лог
+        </button>
+        <button type="button" onClick={onDownloadBundle}>
+          Скачать diagnostics bundle
         </button>
       </div>
       <details>
@@ -2212,6 +2232,9 @@ function DebugPanel({
           </button>
           <button type="button" onClick={onCopyAllSpinReports} disabled={spinReports.length === 0}>
             Скопировать все spin reports
+          </button>
+          <button type="button" onClick={onDownloadSpinReports}>
+            Скачать spin reports
           </button>
           <button type="button" onClick={onClearSpinReports} disabled={spinReports.length === 0}>
             Очистить spin reports
@@ -2566,6 +2589,42 @@ function App() {
     debugLogger.clearSpinReports()
   }
 
+  function handleDownloadDebugLog() {
+    const fileName = createDownloadFileName('vertical-wheel-debug-log')
+    downloadJsonFile(fileName, createDebugLogExport(debugLogger.getEvents()))
+    debugLogger.log('app', 'debug_log_download_success', {
+      eventCount: debugLogger.getEvents().length,
+      fileName,
+    })
+  }
+
+  function handleDownloadSpinReports() {
+    const fileName = createDownloadFileName('vertical-wheel-spin-reports')
+    downloadJsonFile(fileName, createSpinReportsExport(debugLogger.getSpinReports()))
+    debugLogger.log('app', 'spin_reports_download_success', {
+      reportCount: debugLogger.getSpinReports().length,
+      fileName,
+    })
+  }
+
+  function handleDownloadDiagnosticsBundle() {
+    const fileName = createDownloadFileName('vertical-wheel-diagnostics-bundle')
+    downloadJsonFile(
+      fileName,
+      createDiagnosticsBundle({
+        events: debugLogger.getEvents(),
+        spinReports: debugLogger.getSpinReports(),
+        location: createLocationSummary(window.location),
+        userAgent: window.navigator.userAgent,
+      }),
+    )
+    debugLogger.log('app', 'diagnostics_bundle_download_success', {
+      eventCount: debugLogger.getEvents().length,
+      reportCount: debugLogger.getSpinReports().length,
+      fileName,
+    })
+  }
+
   return (
     <main
       className={styles.page}
@@ -2621,6 +2680,9 @@ function App() {
           onCopyLastSpinReport={() => {
             void handleCopyLastSpinReport()
           }}
+          onDownloadBundle={handleDownloadDiagnosticsBundle}
+          onDownloadDebugLog={handleDownloadDebugLog}
+          onDownloadSpinReports={handleDownloadSpinReports}
         />
       ) : null}
     </main>

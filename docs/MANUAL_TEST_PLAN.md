@@ -333,8 +333,14 @@
 - [ ] Нажать «Скопировать лог».
   Ожидаемый результат: диагностический лог копируется в буфер; его можно приложить к defect report.
 
+- [ ] Нажать «Скачать лог».
+  Ожидаемый результат: скачивается JSON-файл `vertical-wheel-debug-log-...json` с хронологическими debug events без base64-картинок, полного JSON и полного share hash.
+
 - [ ] После слабого или валидного жеста открыть блок `Spin reports` и нажать «Скопировать последний spin report».
   Ожидаемый результат: в буфер копируется подробный отчет о последнем жесте: дистанция drag, скорость отпускания, clamp, travel, длительности фаз, snap, candidate/result, samples и детали settling для исключённых опций.
+
+- [ ] В блоке `Spin reports` нажать «Скачать spin reports».
+  Ожидаемый результат: скачивается JSON-файл `vertical-wheel-spin-reports-...json` со всеми spin reports; если отчетов нет, файл содержит пустой структурированный список.
 
 - [ ] Проверить spin с excluded опциями в режиме «Показывать недоступными» и скопировать последний spin report.
   Ожидаемый результат: если raw candidate был excluded, в отчёте видны `rawPhysicalLandingCandidate`, `eligibilityAdjustmentReason`, `eligibilityExtensionCards`, `eligibilityExtensionPx`, `finalSnapDistanceCards` и выбранный active result.
@@ -344,6 +350,9 @@
 
 - [ ] Выполнить несколько spin и нажать «Скопировать все spin reports».
   Ожидаемый результат: копируется список отчетов для анализа физики; эти отчеты нужны для последующей настройки ощущения вращения.
+
+- [ ] Нажать «Скачать diagnostics bundle».
+  Ожидаемый результат: скачивается JSON-файл `vertical-wheel-diagnostics-bundle-...json` с `debugLog`, `spinReports`, counts, userAgent и location summary без полного `#wheel` hash. Для defect report предпочитайте bundle, потому что он объединяет события и spin reports.
 
 - [ ] Нажать «Очистить spin reports».
   Ожидаемый результат: список spin reports очищается, обычный debug log остается доступен отдельно.
