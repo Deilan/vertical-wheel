@@ -2,7 +2,6 @@ export type SpinTelemetryPhase =
   | 'drag'
   | 'coast'
   | 'deceleration'
-  | 'terminal-continuation'
   | 'final-snap'
   | 'complete'
 
@@ -110,7 +109,6 @@ export type SpinTelemetryReport = {
     targetSelectionPolicy?:
       | 'raw-active'
       | 'directional-eligible'
-      | 'insufficient-energy-no-result'
       | 'weak-snap'
       | 'locked'
     localEligibleTargetSelectionApplied?: boolean
@@ -139,10 +137,13 @@ export type SpinTelemetryReport = {
     continuationAllowed?: boolean
     continuationSuppressed?: boolean
     validGestureButNoResult?: boolean
-    noResultReason?: 'insufficient-energy-for-eligible-continuation'
     finalCenteringDistancePx?: number
     finalCenteringDistanceCards?: number
     finalCenteringDurationMs?: number
+    rawExcludedWasNotVisualStop?: boolean
+    integratedExcludedSettling?: boolean
+    decelerationEndpointPolicy?: 'raw-physical-target' | 'resolved-eligible-target'
+    terminalContinuationIntegratedIntoDeceleration?: boolean
     eligibilityMovementWasLong?: boolean
     eligibilityAdjustmentApplied?: boolean
     eligibilityAdjustmentReason?:

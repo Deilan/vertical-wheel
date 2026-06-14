@@ -192,7 +192,7 @@ describe('spin physics', () => {
     ).toBe(5)
   })
 
-  it('suppresses long eligible continuation for weak-feeling valid spins', () => {
+  it('keeps continuation budget diagnostic without suppressing valid spins', () => {
     const energy = evaluateTerminalContinuationEnergy({
       releaseVelocityPxPerSecAfterClamp: 700,
       projectedTravelCards: 3.8,
@@ -200,10 +200,9 @@ describe('spin physics', () => {
     })
 
     expect(energy.continuationBudgetCards).toBe(1.5)
-    expect(energy.continuationAllowed).toBe(false)
-    expect(energy.continuationSuppressed).toBe(true)
-    expect(energy.validGestureButNoResult).toBe(true)
-    expect(energy.noResultReason).toBe('insufficient-energy-for-eligible-continuation')
+    expect(energy.continuationAllowed).toBe(true)
+    expect(energy.continuationSuppressed).toBe(false)
+    expect(energy.validGestureButNoResult).toBe(false)
   })
 
   it('allows nearby continuation for weak-feeling valid spins', () => {
@@ -217,7 +216,7 @@ describe('spin physics', () => {
     expect(energy.continuationSuppressed).toBe(false)
   })
 
-  it('allows larger continuation for medium and strong spins while suppressing extreme weak travel', () => {
+  it('allows larger continuation for medium and strong spins without no-result suppression', () => {
     expect(
       evaluateTerminalContinuationEnergy({
         releaseVelocityPxPerSecAfterClamp: 1200,
@@ -231,7 +230,7 @@ describe('spin physics', () => {
         projectedTravelCards: 5,
         terminalContinuationDistanceCards: 7,
       }).continuationSuppressed,
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('keeps long continuation speed bounded', () => {

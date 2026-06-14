@@ -206,6 +206,10 @@ describe('spin telemetry helpers', () => {
         finalCenteringDistancePx: 0,
         finalCenteringDistanceCards: 0,
         finalCenteringDurationMs: 0,
+        rawExcludedWasNotVisualStop: true,
+        integratedExcludedSettling: true,
+        decelerationEndpointPolicy: 'resolved-eligible-target',
+        terminalContinuationIntegratedIntoDeceleration: true,
         eligibilityMovementWasLong: false,
         adjustedEligibleOption: {
           id: 'a',
@@ -262,9 +266,9 @@ describe('spin telemetry helpers', () => {
     expect(JSON.stringify(report)).not.toContain('data:image/')
   })
 
-  it('reports valid gestures that intentionally produce no result after excluded landing', () => {
+  it('reports far excluded landings as directional eligible results, not no-result suppression', () => {
     const report = createSpinTelemetryReport({
-      reportId: 'spin-suppressed',
+      reportId: 'spin-integrated-exclusion',
       timestamp: '2026-06-02T00:00:00.000Z',
       classification: 'valid spin gesture',
       dragDistancePx: 80,
@@ -295,41 +299,64 @@ describe('spin telemetry helpers', () => {
         projectedTravelDistancePx: -360,
         projectedTravelCards: 3.6,
         actualAnimatedTravelDistancePx: -380,
-        decelerationDurationMs: 800,
-        totalSpinDurationMs: 1100,
-        finalSnapDistancePx: -20,
-        finalSnapDistanceCards: 0.2,
+        decelerationDurationMs: 1800,
+        totalSpinDurationMs: 2100,
+        finalSnapDistancePx: 0,
+        finalSnapDistanceCards: 0,
         finalSnapWasLarge: false,
-        finalPositionBeforeSnapPx: -360,
-        finalSnappedPositionPx: -400,
+        finalPositionBeforeSnapPx: -900,
+        finalSnappedPositionPx: -900,
         rawLandingCandidateExcluded: true,
         candidateWasExcluded: true,
         adjustedDueToExclusion: true,
-        targetSelectionPolicy: 'insufficient-energy-no-result',
+        targetSelectionPolicy: 'directional-eligible',
         rawTerminalLandingWasExcluded: true,
         terminalContinuationDistancePx: -600,
         terminalContinuationDistanceCards: 6,
-        terminalContinuationDurationMs: 0,
+        terminalContinuationDurationMs: 2200,
         terminalContinuationWasLong: true,
         terminalContinuationStartedBeforeStop: false,
         continuationBudgetCards: 1.5,
-        continuationAllowed: false,
-        continuationSuppressed: true,
-        validGestureButNoResult: true,
-        noResultReason: 'insufficient-energy-for-eligible-continuation',
-        finalCenteringDistancePx: -20,
-        finalCenteringDistanceCards: 0.2,
-        finalCenteringDurationMs: 180,
-        eligibilityAdjustmentApplied: false,
+        continuationAllowed: true,
+        continuationSuppressed: false,
+        validGestureButNoResult: false,
+        finalCenteringDistancePx: 0,
+        finalCenteringDistanceCards: 0,
+        finalCenteringDurationMs: 0,
+        rawExcludedWasNotVisualStop: true,
+        integratedExcludedSettling: true,
+        decelerationEndpointPolicy: 'resolved-eligible-target',
+        terminalContinuationIntegratedIntoDeceleration: true,
+        resolvedEligibleTarget: {
+          id: 'a',
+          title: 'Активная',
+          originalIndex: 0,
+          visibleIndex: 0,
+          active: true,
+          excluded: false,
+          positionPx: -900,
+        },
+        selectedResult: {
+          id: 'a',
+          title: 'Активная',
+          originalIndex: 0,
+          visibleIndex: 0,
+          active: true,
+          excluded: false,
+        },
+        eligibilityAdjustmentApplied: true,
         eligibilityAdjustmentReason: 'candidate-excluded',
-        eligibilityAdjustmentDirection: 'none',
+        eligibilityAdjustmentDirection: 'backward',
         safetyClampApplied: false,
       },
     })
 
-    expect(report.valid?.targetSelectionPolicy).toBe('insufficient-energy-no-result')
-    expect(report.valid?.validGestureButNoResult).toBe(true)
-    expect(report.valid?.selectedResult).toBeUndefined()
-    expect(report.valid?.noResultReason).toBe('insufficient-energy-for-eligible-continuation')
+    expect(report.valid?.targetSelectionPolicy).toBe('directional-eligible')
+    expect(report.valid?.validGestureButNoResult).toBe(false)
+    expect(report.valid?.continuationSuppressed).toBe(false)
+    expect(report.valid?.selectedResult?.id).toBe('a')
+    expect(report.valid?.rawExcludedWasNotVisualStop).toBe(true)
+    expect(report.valid?.integratedExcludedSettling).toBe(true)
+    expect(report.valid?.finalSnapWasLarge).toBe(false)
   })
 })

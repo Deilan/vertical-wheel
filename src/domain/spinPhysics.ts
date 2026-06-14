@@ -23,7 +23,6 @@ export type TerminalContinuationEnergyResult = {
   continuationAllowed: boolean
   continuationSuppressed: boolean
   validGestureButNoResult: boolean
-  noResultReason?: 'insufficient-energy-for-eligible-continuation'
 }
 
 export type SpinCalculationInput = {
@@ -159,19 +158,12 @@ export function evaluateTerminalContinuationEnergy(
   input: TerminalContinuationEnergyInput,
 ): TerminalContinuationEnergyResult {
   const continuationBudgetCards = calculateContinuationBudgetCards(input)
-  const continuationAllowed =
-    input.terminalContinuationDistanceCards <= 0.75 ||
-    input.terminalContinuationDistanceCards <= continuationBudgetCards
-  const continuationSuppressed = !continuationAllowed
 
   return {
     continuationBudgetCards,
-    continuationAllowed,
-    continuationSuppressed,
-    validGestureButNoResult: continuationSuppressed,
-    noResultReason: continuationSuppressed
-      ? 'insufficient-energy-for-eligible-continuation'
-      : undefined,
+    continuationAllowed: true,
+    continuationSuppressed: false,
+    validGestureButNoResult: false,
   }
 }
 
