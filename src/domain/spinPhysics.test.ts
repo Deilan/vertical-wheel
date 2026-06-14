@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateSpinOutcome,
+  calculateTerminalSettleDurationMs,
   defaultSpinPhysicsConfig,
   isValidSpinGesture,
   projectInertialTravelPx,
@@ -132,6 +133,21 @@ describe('spin physics', () => {
     expect(snapPositionToCard(149, 100)).toBe(100)
     expect(snapPositionToCard(151, 100)).toBe(200)
     expect(snapPositionToCard(-151, 100)).toBe(-200)
+  })
+
+  it('uses bounded distance-based terminal settle durations', () => {
+    expect(calculateTerminalSettleDurationMs(0)).toBe(0)
+    expect(calculateTerminalSettleDurationMs(6)).toBeGreaterThanOrEqual(80)
+    expect(calculateTerminalSettleDurationMs(6)).toBeLessThanOrEqual(120)
+    expect(calculateTerminalSettleDurationMs(36)).toBeGreaterThan(120)
+    expect(calculateTerminalSettleDurationMs(36)).toBeLessThanOrEqual(320)
+    expect(calculateTerminalSettleDurationMs(80)).toBeGreaterThanOrEqual(320)
+    expect(calculateTerminalSettleDurationMs(800)).toBe(460)
+  })
+
+  it('does not use a fixed 120ms jump for 30-50px terminal settles', () => {
+    expect(calculateTerminalSettleDurationMs(32)).toBeGreaterThan(120)
+    expect(calculateTerminalSettleDurationMs(48)).toBe(320)
   })
 
   it('rejects nonpositive card steps', () => {

@@ -68,6 +68,13 @@ export type SpinTelemetryReport = {
     snapTargetPositionPx: number
     snapDistancePx: number
     noResult: true
+    targetSelectionPolicy?: 'weak-snap' | 'locked'
+    finalSettleAnimated?: boolean
+    finalSettleDurationMs?: number
+    finalSettleDistancePx?: number
+    finalSettleDistanceCards?: number
+    visibleJumpPrevented?: boolean
+    finalCorrectionPx?: number
   }
   valid?: {
     initialVelocityPxPerSec: number
@@ -94,6 +101,21 @@ export type SpinTelemetryReport = {
     selectedResult?: SpinTelemetryOptionSummary
     candidateWasExcluded: boolean
     adjustedDueToExclusion: boolean
+    targetSelectionPolicy?:
+      | 'raw-active'
+      | 'nearest-eligible'
+      | 'direction-tie-break'
+      | 'weak-snap'
+      | 'locked'
+    localEligibleTargetSelectionApplied?: boolean
+    rawTerminalLandingPositionPx?: number
+    nearestEligibleTarget?: SpinTelemetryOptionSummary
+    nearestEligibleDistancePx?: number
+    nearestEligibleDistanceCards?: number
+    directionPreferredTarget?: SpinTelemetryOptionSummary
+    directionPreferredDistanceCards?: number
+    chosenTargetDirection?: 'same-direction' | 'reverse-direction' | 'tie' | 'none'
+    eligibilityMovementWasLong?: boolean
     eligibilityAdjustmentApplied?: boolean
     eligibilityAdjustmentReason?:
       | 'none'
@@ -110,6 +132,12 @@ export type SpinTelemetryReport = {
     totalTravelAfterEligibilityExtensionPx?: number
     totalDurationBeforeEligibilityExtensionMs?: number
     totalDurationAfterEligibilityExtensionMs?: number
+    finalSettleAnimated?: boolean
+    finalSettleDurationMs?: number
+    finalSettleDistancePx?: number
+    finalSettleDistanceCards?: number
+    visibleJumpPrevented?: boolean
+    finalCorrectionPx?: number
     safetyClampApplied: boolean
   }
 }

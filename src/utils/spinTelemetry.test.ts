@@ -154,6 +154,22 @@ describe('spin telemetry helpers', () => {
           positionPx: 500,
         },
         rawLandingCandidateExcluded: true,
+        targetSelectionPolicy: 'nearest-eligible',
+        localEligibleTargetSelectionApplied: true,
+        rawTerminalLandingPositionPx: 500,
+        nearestEligibleTarget: {
+          id: 'a',
+          title: 'Активная',
+          originalIndex: 0,
+          visibleIndex: 0,
+          active: true,
+          excluded: false,
+          positionPx: 600,
+        },
+        nearestEligibleDistancePx: 100,
+        nearestEligibleDistanceCards: 1,
+        chosenTargetDirection: 'same-direction',
+        eligibilityMovementWasLong: false,
         adjustedEligibleOption: {
           id: 'a',
           title: 'Активная',
@@ -185,11 +201,19 @@ describe('spin telemetry helpers', () => {
         totalTravelAfterEligibilityExtensionPx: 480,
         totalDurationBeforeEligibilityExtensionMs: 1000,
         totalDurationAfterEligibilityExtensionMs: 1120,
+        finalSettleAnimated: true,
+        finalSettleDurationMs: 180,
+        finalSettleDistancePx: 20,
+        finalSettleDistanceCards: 0.2,
+        visibleJumpPrevented: true,
+        finalCorrectionPx: 0,
         safetyClampApplied: false,
       },
     })
 
     expect(report.valid?.eligibilityAdjustmentReason).toBe('candidate-excluded')
+    expect(report.valid?.targetSelectionPolicy).toBe('nearest-eligible')
+    expect(report.valid?.finalSettleAnimated).toBe(true)
     expect(report.valid?.finalSnapWasLarge).toBe(false)
     expect(JSON.stringify(report)).not.toContain('data:image/')
   })

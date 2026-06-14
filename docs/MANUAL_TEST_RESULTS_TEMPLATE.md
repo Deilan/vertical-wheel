@@ -51,7 +51,7 @@
 | Exclusion | Ask блокирует следующий spin до решения |  |  |  |
 | Exclusion | Hidden excluded опции исчезают из барабана |  |  |  |
 | Exclusion | Visible-disabled excluded опции не становятся результатом |  |  |  |
-| Exclusion | Settling после excluded candidate ощущается естественно |  | `feltSlip: yes/no; feltNatural: 1-5; comment:` |  |
+| Exclusion | Settling после excluded candidate ощущается естественно |  | `feltSlip: yes/no; feltJump: yes/no; feltNatural: 1-5; finalSettleDurationMs:; nearestEligibleDistanceCards:; chosenTargetDirection:; comment:` |  |
 | Exclusion | Restore one / restore all |  |  |  |
 | Exclusion | Active count меньше 2 блокирует spin |  |  |  |
 | Exclusion | Share link сбрасывает текущее excluded state |  |  |  |
@@ -82,6 +82,7 @@
 - Viewport:
 - Suspected area: `spin` / `editor` / `exclusion` / `images` / `json` / `share` / `history` / `mobile`
 - Felt slip: `yes` / `no`
+- Felt jump: `yes` / `no`
 - Felt natural: `1` / `2` / `3` / `4` / `5`
 - Spin report/debug log:
 - Steps to reproduce:

@@ -304,3 +304,172 @@ export function adjustLandingPositionToEligibleOption({
 
   return undefined
 }
+
+export type TerminalEligibleTargetSelectionPolicy =
+  | 'raw-active'
+  | 'nearest-eligible'
+  | 'direction-tie-break'
+  | 'weak-snap'
+  | 'locked'
+
+export type TerminalEligibleTargetDirection =
+  | 'same-direction'
+  | 'reverse-direction'
+  | 'tie'
+  | 'none'
+
+export type TerminalEligibleTargetResolution = {
+  positionPx: number
+  index: number
+  option: WheelOption
+  candidateIndex: number
+  candidateOption: WheelOption
+  candidatePositionPx: number
+  candidateWasExcluded: boolean
+  targetSelectionPolicy: TerminalEligibleTargetSelectionPolicy
+  localEligibleTargetSelectionApplied: boolean
+  nearestEligibleDistancePx: number
+  nearestEligibleDistanceCards: number
+  directionPreferredIndex?: number
+  directionPreferredOption?: WheelOption
+  directionPreferredPositionPx?: number
+  directionPreferredDistanceCards?: number
+  chosenTargetDirection: TerminalEligibleTargetDirection
+  eligibilityExtensionCards: number
+  eligibilityExtensionPx: number
+}
+
+export function resolveTerminalEligibleTarget({
+  options,
+  sessionState,
+  rawPositionPx,
+  cardStepPx,
+  spinDirection,
+  nearTieToleranceCards = 0.2,
+}: {
+  options: WheelOption[]
+  sessionState: WheelSessionState
+  rawPositionPx: number
+  cardStepPx: number
+  spinDirection: number
+  nearTieToleranceCards?: number
+}): TerminalEligibleTargetResolution | undefined {
+  if (cardStepPx <= 0) {
+    throw new Error('Шаг карточки должен быть положительным.')
+  }
+
+  if (options.length === 0 || !canSpinWithActiveOptions(options, sessionState)) {
+    return undefined
+  }
+
+  const direction = spinDirection >= 0 ? 1 : -1
+  const rawVirtualIndex = Math.round(rawPositionPx / cardStepPx)
+  const candidateIndex = ((rawVirtualIndex % options.length) + options.length) % options.length
+  const candidateOption = options[candidateIndex]
+  const candidatePositionPx = rawVirtualIndex * cardStepPx
+  const candidateWasExcluded = isOptionExcluded(candidateOption.id, sessionState)
+
+  if (!candidateWasExcluded) {
+    return {
+      positionPx: candidatePositionPx,
+      index: candidateIndex,
+      option: candidateOption,
+      candidateIndex,
+      candidateOption,
+      candidatePositionPx,
+      candidateWasExcluded,
+      targetSelectionPolicy: 'raw-active',
+      localEligibleTargetSelectionApplied: false,
+      nearestEligibleDistancePx: 0,
+      nearestEligibleDistanceCards: 0,
+      chosenTargetDirection: 'none',
+      eligibilityExtensionCards: 0,
+      eligibilityExtensionPx: 0,
+    }
+  }
+
+  const eligibleTargets: Array<{
+    index: number
+    option: WheelOption
+    positionPx: number
+    signedDistanceCards: number
+    absoluteDistanceCards: number
+  }> = []
+
+  for (let offset = -options.length; offset <= options.length; offset += 1) {
+    const virtualIndex = rawVirtualIndex + offset
+    const index = ((virtualIndex % options.length) + options.length) % options.length
+    const option = options[index]
+
+    if (!isOptionExcluded(option.id, sessionState)) {
+      eligibleTargets.push({
+        index,
+        option,
+        positionPx: virtualIndex * cardStepPx,
+        signedDistanceCards: offset,
+        absoluteDistanceCards: Math.abs(offset),
+      })
+    }
+  }
+
+  if (eligibleTargets.length === 0) {
+    return undefined
+  }
+
+  const sameDirectionTargets = eligibleTargets
+    .filter((target) =>
+      direction >= 0 ? target.signedDistanceCards >= 0 : target.signedDistanceCards <= 0,
+    )
+    .sort((left, right) => left.absoluteDistanceCards - right.absoluteDistanceCards)
+  const directionPreferredTarget = sameDirectionTargets[0]
+  const nearestDistanceCards = Math.min(
+    ...eligibleTargets.map((target) => target.absoluteDistanceCards),
+  )
+  const nearestTargets = eligibleTargets
+    .filter(
+      (target) =>
+        target.absoluteDistanceCards <= nearestDistanceCards + Math.max(nearTieToleranceCards, 0),
+    )
+    .sort((left, right) => left.absoluteDistanceCards - right.absoluteDistanceCards)
+  const sameDirectionNearTarget = nearestTargets.find((target) =>
+    direction >= 0 ? target.signedDistanceCards >= 0 : target.signedDistanceCards <= 0,
+  )
+  const chosenTarget = sameDirectionNearTarget ?? nearestTargets[0]
+  const exactNearestTargets = eligibleTargets.filter(
+    (target) => target.absoluteDistanceCards === nearestDistanceCards,
+  )
+  const hasExactTie = exactNearestTargets.length > 1
+  const chosenTargetDirection =
+    chosenTarget.signedDistanceCards === 0
+      ? 'none'
+      : hasExactTie
+        ? 'tie'
+        : Math.sign(chosenTarget.signedDistanceCards) === direction
+          ? 'same-direction'
+          : 'reverse-direction'
+
+  return {
+    positionPx: chosenTarget.positionPx,
+    index: chosenTarget.index,
+    option: chosenTarget.option,
+    candidateIndex,
+    candidateOption,
+    candidatePositionPx,
+    candidateWasExcluded,
+    targetSelectionPolicy:
+      sameDirectionNearTarget &&
+      (sameDirectionNearTarget !== nearestTargets[0] || hasExactTie || nearestTargets.length > 1)
+        ? 'direction-tie-break'
+        : 'nearest-eligible',
+    localEligibleTargetSelectionApplied: true,
+    nearestEligibleDistancePx: Math.abs(chosenTarget.positionPx - candidatePositionPx),
+    nearestEligibleDistanceCards: chosenTarget.absoluteDistanceCards,
+    directionPreferredIndex: directionPreferredTarget?.index,
+    directionPreferredOption: directionPreferredTarget?.option,
+    directionPreferredPositionPx: directionPreferredTarget?.positionPx,
+    directionPreferredDistanceCards: directionPreferredTarget?.absoluteDistanceCards,
+    chosenTargetDirection,
+    eligibilityExtensionCards: chosenTarget.absoluteDistanceCards,
+    eligibilityExtensionPx: chosenTarget.positionPx - candidatePositionPx,
+  }
+}

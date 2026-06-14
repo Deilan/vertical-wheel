@@ -13,7 +13,6 @@ import {
   reconcileHistoryForConfig,
 } from './domain/history'
 import {
-  adjustLandingPositionToEligibleOption,
   applyAfterResultDecision,
   getActiveOptionCount,
   getAutomaticAfterResultDecision,
@@ -24,9 +23,11 @@ import {
   getVisibleOptions,
   restoreAllExcludedOptions,
   restoreOptionToRotation,
+  resolveTerminalEligibleTarget,
   validateAskAllowedDecisions,
 } from './domain/optionExclusion'
 import {
+  calculateTerminalSettleDurationMs,
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
   snapPositionToCard,
@@ -1049,6 +1050,8 @@ function SpinScreen({
 
     if (isSpinLockedByActiveCount) {
       const finalPositionPx = snapPositionToCard(releasePositionPx, cardStepPx)
+      const finalSettleDistancePx = finalPositionPx - releasePositionPx
+      const finalSettleDurationMs = calculateTerminalSettleDurationMs(finalSettleDistancePx)
       debugLogger.log('spin', 'blocked-active-count', {
         activeCount: activeOptionCount,
         excludedCount: excludedOptionCount,
@@ -1086,14 +1089,21 @@ function SpinScreen({
             frameSamples: [],
             weak: {
               snapTargetPositionPx: finalPositionPx,
-              snapDistancePx: finalPositionPx - releasePositionPx,
+              snapDistancePx: finalSettleDistancePx,
               noResult: true,
+              targetSelectionPolicy: 'locked',
+              finalSettleAnimated: finalSettleDurationMs > 0,
+              finalSettleDurationMs,
+              finalSettleDistancePx,
+              finalSettleDistanceCards: Math.abs(finalSettleDistancePx / cardStepPx),
+              visibleJumpPrevented: finalSettleDurationMs > 120,
+              finalCorrectionPx: 0,
             },
           }),
         )
       }
 
-      animateTo(finalPositionPx, 260)
+      animateTo(finalPositionPx, finalSettleDurationMs)
       return
     }
 
@@ -1105,76 +1115,62 @@ function SpinScreen({
       jitterCards: getRandomJitterCards(),
     })
     const spinDirection = releaseVelocityPxPerSec >= 0 ? 1 : -1
-    const adjustedLanding =
+    const terminalTarget =
       outcome.kind === 'spin'
-        ? adjustLandingPositionToEligibleOption({
+        ? resolveTerminalEligibleTarget({
             options: visibleOptions,
             sessionState,
-            candidatePositionPx: outcome.finalPositionPx,
+            rawPositionPx: outcome.finalPositionPx,
             cardStepPx,
             spinDirection,
           })
         : undefined
-    const finalPositionPx = adjustedLanding?.positionPx ?? outcome.finalPositionPx
+    const finalPositionPx = terminalTarget?.positionPx ?? outcome.finalPositionPx
     const eligibilityExtensionPx =
-      outcome.kind === 'spin' ? adjustedLanding?.extensionPx ?? 0 : 0
+      outcome.kind === 'spin' ? terminalTarget?.eligibilityExtensionPx ?? 0 : 0
     const eligibilityExtensionCards =
-      outcome.kind === 'spin' ? Math.abs(eligibilityExtensionPx / cardStepPx) : 0
-    const eligibilityExtensionDurationMs =
-      outcome.kind === 'spin'
-        ? Math.round(clampNumber(eligibilityExtensionCards * 90, 0, 420))
-        : 0
+      outcome.kind === 'spin' ? terminalTarget?.eligibilityExtensionCards ?? 0 : 0
     const coastPositionPx =
       outcome.kind === 'spin'
         ? outcome.coastPositionPx
         : outcome.finalPositionPx
     const inertialPositionPx =
       outcome.kind === 'spin'
-        ? outcome.inertialPositionPx + eligibilityExtensionPx
+        ? outcome.inertialPositionPx
         : outcome.finalPositionPx
     const finalSnapDistancePx =
       outcome.kind === 'spin'
         ? finalPositionPx - inertialPositionPx
         : outcome.finalPositionPx - positionRef.current
-    const snapDurationMs =
-      outcome.kind === 'spin'
-        ? Math.round(
-            clampNumber(
-              (Math.abs(finalSnapDistancePx) / cardStepPx) *
-                defaultSpinPhysicsConfig.finalSnapDurationMs,
-              120,
-              defaultSpinPhysicsConfig.finalSnapDurationMs,
-            ),
-          )
-        : outcome.durationMs
+    const snapDurationMs = calculateTerminalSettleDurationMs(finalSnapDistancePx)
     const result =
       outcome.kind === 'spin'
-        ? adjustedLanding?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
+        ? terminalTarget?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
         : undefined
     const rawCandidateIndex =
       outcome.kind === 'spin'
-        ? adjustedLanding?.candidateIndex ??
+        ? terminalTarget?.candidateIndex ??
           getWinningOptionIndex(outcome.finalPositionPx, cardStepPx, visibleOptions.length)
         : undefined
     const rawCandidate =
-      adjustedLanding?.candidateOption ??
+      terminalTarget?.candidateOption ??
       (rawCandidateIndex === undefined ? undefined : visibleOptions[rawCandidateIndex])
     const candidateWasExcluded = rawCandidate
-      ? adjustedLanding?.candidateWasExcluded ??
+      ? terminalTarget?.candidateWasExcluded ??
         getExcludedOptionDisplayMode(rawCandidate.id, sessionState) !== undefined
       : false
     const rawCandidateTelemetry = rawCandidate
       ? visibleOptionTelemetryById.get(rawCandidate.id)
       : undefined
-    const adjustedTelemetry = adjustedLanding
-      ? visibleOptionTelemetryById.get(adjustedLanding.option.id)
+    const adjustedTelemetry = terminalTarget
+      ? visibleOptionTelemetryById.get(terminalTarget.option.id)
       : result
         ? visibleOptionTelemetryById.get(result.id)
         : undefined
     const eligibilityAdjustmentReason =
       outcome.kind !== 'spin'
         ? 'none'
-        : adjustedLanding
+        : terminalTarget
           ? candidateWasExcluded
             ? 'candidate-excluded'
             : 'none'
@@ -1183,15 +1179,21 @@ function SpinScreen({
             : 'no-eligible-options'
     const eligibilityAdjustmentDirection =
       outcome.kind === 'spin' && eligibilityExtensionPx !== 0
-        ? spinDirection >= 0
-          ? 'forward'
-          : 'backward'
+        ? terminalTarget?.chosenTargetDirection === 'reverse-direction'
+          ? 'backward'
+          : 'forward'
         : 'none'
     const finalSnapDistanceCards =
       outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
+    const finalSettleAnimated = snapDurationMs > 0
+    const finalSettleDistanceCards =
+      outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
+    const eligibilityMovementWasLong = eligibilityExtensionCards > 1.5
 
     if (debugLogger.isEnabled()) {
       if (outcome.kind === 'snap') {
+        const finalSettleDistancePx = outcome.finalPositionPx - releasePositionPx
+        const finalSettleDurationMs = calculateTerminalSettleDurationMs(finalSettleDistancePx)
         debugLogger.addSpinReport(
           createSpinTelemetryReport({
             classification: 'weak gesture',
@@ -1218,8 +1220,15 @@ function SpinScreen({
             frameSamples: [],
             weak: {
               snapTargetPositionPx: outcome.finalPositionPx,
-              snapDistancePx: outcome.finalPositionPx - releasePositionPx,
+              snapDistancePx: finalSettleDistancePx,
               noResult: true,
+              targetSelectionPolicy: 'weak-snap',
+              finalSettleAnimated: finalSettleDurationMs > 0,
+              finalSettleDurationMs,
+              finalSettleDistancePx,
+              finalSettleDistanceCards: Math.abs(finalSettleDistancePx / cardStepPx),
+              visibleJumpPrevented: finalSettleDurationMs > 120,
+              finalCorrectionPx: 0,
             },
           }),
         )
@@ -1256,9 +1265,8 @@ function SpinScreen({
             projectedTravelCards: outcome.virtualCardsToTravel,
             actualAnimatedTravelDistancePx: finalPositionPx - releasePositionPx,
             coastDurationMs: outcome.coastDurationMs,
-            decelerationDurationMs: outcome.decelerationDurationMs + eligibilityExtensionDurationMs,
-            totalSpinDurationMs:
-              outcome.inertialDurationMs + eligibilityExtensionDurationMs + snapDurationMs,
+            decelerationDurationMs: outcome.decelerationDurationMs,
+            totalSpinDurationMs: outcome.inertialDurationMs + snapDurationMs,
             finalSnapDistancePx,
             finalSnapDistanceCards,
             finalSnapWasLarge: finalSnapDistanceCards !== undefined && finalSnapDistanceCards > 0.5,
@@ -1266,16 +1274,16 @@ function SpinScreen({
             finalSnappedPositionPx: finalPositionPx,
             rawLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex, {
               ...rawCandidateTelemetry,
-              positionPx: adjustedLanding?.candidatePositionPx ?? outcome.finalPositionPx,
+              positionPx: terminalTarget?.candidatePositionPx ?? outcome.finalPositionPx,
             }),
             rawPhysicalLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex, {
               ...rawCandidateTelemetry,
-              positionPx: adjustedLanding?.candidatePositionPx ?? outcome.finalPositionPx,
+              positionPx: terminalTarget?.candidatePositionPx ?? outcome.finalPositionPx,
             }),
             rawLandingCandidateExcluded: candidateWasExcluded,
             adjustedEligibleOption: getTelemetryOptionSummary(
-              adjustedLanding?.option ?? result,
-              adjustedLanding?.index ?? rawCandidateIndex,
+              terminalTarget?.option ?? result,
+              terminalTarget?.index ?? rawCandidateIndex,
               {
                 ...adjustedTelemetry,
                 positionPx: finalPositionPx,
@@ -1283,7 +1291,7 @@ function SpinScreen({
             ),
             selectedResult: getTelemetryOptionSummary(
               result,
-              adjustedLanding?.index ?? rawCandidateIndex,
+              terminalTarget?.index ?? rawCandidateIndex,
               {
                 ...adjustedTelemetry,
                 positionPx: finalPositionPx,
@@ -1291,20 +1299,51 @@ function SpinScreen({
             ),
             candidateWasExcluded,
             adjustedDueToExclusion: candidateWasExcluded,
+            targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'nearest-eligible',
+            localEligibleTargetSelectionApplied:
+              terminalTarget?.localEligibleTargetSelectionApplied ?? false,
+            rawTerminalLandingPositionPx: outcome.finalPositionPx,
+            nearestEligibleTarget: getTelemetryOptionSummary(
+              terminalTarget?.option ?? result,
+              terminalTarget?.index ?? rawCandidateIndex,
+              {
+                ...adjustedTelemetry,
+                positionPx: finalPositionPx,
+              },
+            ),
+            nearestEligibleDistancePx: terminalTarget?.nearestEligibleDistancePx ?? 0,
+            nearestEligibleDistanceCards: terminalTarget?.nearestEligibleDistanceCards ?? 0,
+            directionPreferredTarget: getTelemetryOptionSummary(
+              terminalTarget?.directionPreferredOption,
+              terminalTarget?.directionPreferredIndex,
+              terminalTarget?.directionPreferredPositionPx === undefined
+                ? undefined
+                : {
+                    positionPx: terminalTarget.directionPreferredPositionPx,
+                  },
+            ),
+            directionPreferredDistanceCards: terminalTarget?.directionPreferredDistanceCards,
+            chosenTargetDirection: terminalTarget?.chosenTargetDirection ?? 'none',
+            eligibilityMovementWasLong,
             eligibilityAdjustmentApplied: eligibilityExtensionPx !== 0,
             eligibilityAdjustmentReason,
             eligibilityAdjustmentDirection,
             eligibilityExtensionCards,
             eligibilityExtensionPx,
             projectedPositionBeforeEligibilityAdjustmentPx:
-              adjustedLanding?.candidatePositionPx ?? outcome.finalPositionPx,
+              terminalTarget?.candidatePositionPx ?? outcome.finalPositionPx,
             projectedPositionAfterEligibilityAdjustmentPx: finalPositionPx,
             positionBeforeFinalSnapPx: inertialPositionPx,
             totalTravelBeforeEligibilityExtensionPx: outcome.finalPositionPx - releasePositionPx,
             totalTravelAfterEligibilityExtensionPx: finalPositionPx - releasePositionPx,
             totalDurationBeforeEligibilityExtensionMs: outcome.durationMs,
-            totalDurationAfterEligibilityExtensionMs:
-              outcome.inertialDurationMs + eligibilityExtensionDurationMs + snapDurationMs,
+            totalDurationAfterEligibilityExtensionMs: outcome.inertialDurationMs + snapDurationMs,
+            finalSettleAnimated,
+            finalSettleDurationMs: snapDurationMs,
+            finalSettleDistancePx: finalSnapDistancePx,
+            finalSettleDistanceCards,
+            visibleJumpPrevented: snapDurationMs > 120,
+            finalCorrectionPx: 0,
             safetyClampApplied: outcome.safetyClampApplied,
           },
         })
@@ -1333,8 +1372,8 @@ function SpinScreen({
         inertialPositionPx,
         finalPositionPx,
         coastDurationMs: outcome.coastDurationMs,
-        decelerationDurationMs: outcome.decelerationDurationMs + eligibilityExtensionDurationMs,
-        inertialDurationMs: outcome.inertialDurationMs + eligibilityExtensionDurationMs,
+        decelerationDurationMs: outcome.decelerationDurationMs,
+        inertialDurationMs: outcome.inertialDurationMs,
         snapDurationMs,
         result,
       })

@@ -70,6 +70,28 @@ export function snapPositionToCard(positionPx: number, cardStepPx: number): numb
   return Math.round(positionPx / cardStepPx) * cardStepPx
 }
 
+export function calculateTerminalSettleDurationMs(distancePx: number): number {
+  const distance = Math.abs(distancePx)
+
+  if (distance <= 0) {
+    return 0
+  }
+
+  if (distance <= 8) {
+    return Math.round(clamp(80 + (distance / 8) * 40, 80, 120))
+  }
+
+  if (distance <= 24) {
+    return Math.round(clamp(140 + ((distance - 8) / 16) * 80, 140, 220))
+  }
+
+  if (distance <= 48) {
+    return Math.round(clamp(220 + ((distance - 24) / 24) * 100, 220, 320))
+  }
+
+  return Math.round(clamp(320 + ((distance - 48) / 96) * 140, 320, 460))
+}
+
 export function isValidSpinGesture(
   dragDistancePx: number,
   releaseVelocityPxPerSec: number,
@@ -172,7 +194,9 @@ export function calculateSpinOutcome(input: SpinCalculationInput): SpinCalculati
     return {
       kind: 'snap',
       finalPositionPx: snapPositionToCard(input.currentPositionPx, input.cardStepPx),
-      durationMs: 260,
+      durationMs: calculateTerminalSettleDurationMs(
+        snapPositionToCard(input.currentPositionPx, input.cardStepPx) - input.currentPositionPx,
+      ),
     }
   }
 
@@ -192,13 +216,7 @@ export function calculateSpinOutcome(input: SpinCalculationInput): SpinCalculati
   const rawFinalPositionPx = inertialPositionPx + direction * jitterCards * input.cardStepPx
   const finalPositionPx = snapPositionToCard(rawFinalPositionPx, input.cardStepPx)
   const snapDistancePx = finalPositionPx - inertialPositionPx
-  const snapDurationMs = Math.round(
-    clamp(
-      (Math.abs(snapDistancePx) / input.cardStepPx) * config.finalSnapDurationMs,
-      120,
-      config.finalSnapDurationMs,
-    ),
-  )
+  const snapDurationMs = calculateTerminalSettleDurationMs(snapDistancePx)
 
   return {
     kind: 'spin',

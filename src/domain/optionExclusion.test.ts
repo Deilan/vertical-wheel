@@ -19,8 +19,19 @@ import {
   reconcileExcludedOptionsForConfig,
   restoreAllExcludedOptions,
   restoreOptionToRotation,
+  resolveTerminalEligibleTarget,
   validateAskAllowedDecisions,
 } from './optionExclusion'
+import type { WheelOption } from './types'
+
+function testOption(id: string): WheelOption {
+  return {
+    id,
+    title: id,
+    backgroundColor: '#111827',
+    textColor: '#f8fafc',
+  }
+}
 import type { WheelConfig, WheelSessionState } from './types'
 
 function createSession(excludedOptions: WheelSessionState['excludedOptions'] = []): WheelSessionState {
@@ -251,6 +262,95 @@ describe('option exclusion domain logic', () => {
     expect(visibleOptions.some((option) => option.id === options[1].id)).toBe(false)
     expect(adjusted?.candidateWasExcluded).toBe(false)
     expect(adjusted?.option.id).toBe(visibleOptions[1].id)
+  })
+
+  it('selects raw active terminal candidate without nearest-eligible adjustment', () => {
+    const options = demoWheelConfig.wheel.options
+    const resolved = resolveTerminalEligibleTarget({
+      options,
+      sessionState: createSession([{ optionId: options[1].id, displayMode: 'show-disabled' }]),
+      rawPositionPx: 200,
+      cardStepPx: 100,
+      spinDirection: 1,
+    })
+
+    expect(resolved?.index).toBe(2)
+    expect(resolved?.candidateWasExcluded).toBe(false)
+    expect(resolved?.targetSelectionPolicy).toBe('raw-active')
+    expect(resolved?.localEligibleTargetSelectionApplied).toBe(false)
+    expect(resolved?.eligibilityExtensionCards).toBe(0)
+  })
+
+  it('chooses closer reverse eligible target over far same-direction target', () => {
+    const options = ['a', 'b', 'c', 'd', 'e', 'f'].map(testOption)
+    const state = createSession([
+      { optionId: options[0].id, displayMode: 'show-disabled' },
+      { optionId: options[1].id, displayMode: 'show-disabled' },
+      { optionId: options[3].id, displayMode: 'show-disabled' },
+      { optionId: options[4].id, displayMode: 'show-disabled' },
+    ])
+    const resolved = resolveTerminalEligibleTarget({
+      options,
+      sessionState: state,
+      rawPositionPx: 300,
+      cardStepPx: 100,
+      spinDirection: 1,
+    })
+
+    expect(resolved?.candidateOption.id).toBe(options[3].id)
+    expect(resolved?.option.id).toBe(options[2].id)
+    expect(resolved?.chosenTargetDirection).toBe('reverse-direction')
+    expect(resolved?.directionPreferredOption?.id).toBe(options[5].id)
+    expect(resolved?.nearestEligibleDistanceCards).toBe(1)
+    expect(resolved?.directionPreferredDistanceCards).toBe(2)
+  })
+
+  it('uses spin direction as a near-tie breaker', () => {
+    const options = ['a', 'b', 'c', 'd', 'e', 'f'].map(testOption)
+    const state = createSession([
+      { optionId: options[0].id, displayMode: 'show-disabled' },
+      { optionId: options[2].id, displayMode: 'show-disabled' },
+      { optionId: options[4].id, displayMode: 'show-disabled' },
+      { optionId: options[5].id, displayMode: 'show-disabled' },
+    ])
+    const resolved = resolveTerminalEligibleTarget({
+      options,
+      sessionState: state,
+      rawPositionPx: 200,
+      cardStepPx: 100,
+      spinDirection: 1,
+    })
+
+    expect(resolved?.option.id).toBe(options[3].id)
+    expect(resolved?.targetSelectionPolicy).toBe('direction-tie-break')
+    expect(resolved?.chosenTargetDirection).toBe('tie')
+  })
+
+  it('prevents slow spins from receiving long same-direction forced extensions', () => {
+    const options = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map(testOption)
+    const candidateOption = options[2]
+    const closerReverseOption = options[1]
+    const farSameDirectionOption = options[8]
+    const excludedOptions = options
+      .filter(
+        (option) =>
+          option.id !== closerReverseOption.id && option.id !== farSameDirectionOption.id,
+      )
+      .map((option) => ({ optionId: option.id, displayMode: 'show-disabled' as const }))
+    const resolved = resolveTerminalEligibleTarget({
+      options,
+      sessionState: createSession(excludedOptions),
+      rawPositionPx: 200,
+      cardStepPx: 100,
+      spinDirection: 1,
+    })
+
+    expect(candidateOption.id).toBe(options[2].id)
+    expect(resolved?.candidateWasExcluded).toBe(true)
+    expect(resolved?.option.id).toBe(closerReverseOption.id)
+    expect(resolved?.directionPreferredOption?.id).toBe(farSameDirectionOption.id)
+    expect(resolved?.nearestEligibleDistanceCards).toBe(1)
+    expect(resolved?.directionPreferredDistanceCards).toBe(6)
   })
 
   it('reconciles excluded session state for config fingerprint and option ids', () => {
