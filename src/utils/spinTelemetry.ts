@@ -103,8 +103,7 @@ export type SpinTelemetryReport = {
     adjustedDueToExclusion: boolean
     targetSelectionPolicy?:
       | 'raw-active'
-      | 'nearest-eligible'
-      | 'direction-tie-break'
+      | 'directional-eligible'
       | 'weak-snap'
       | 'locked'
     localEligibleTargetSelectionApplied?: boolean
@@ -114,7 +113,21 @@ export type SpinTelemetryReport = {
     nearestEligibleDistanceCards?: number
     directionPreferredTarget?: SpinTelemetryOptionSummary
     directionPreferredDistanceCards?: number
-    chosenTargetDirection?: 'same-direction' | 'reverse-direction' | 'tie' | 'none'
+    chosenTargetDirection?: 'same-direction' | 'none'
+    directionPreserved?: boolean
+    reverseDirectionCandidateIgnored?: boolean
+    reverseDirectionCandidate?: SpinTelemetryOptionSummary
+    reverseDirectionCandidateDistanceCards?: number
+    rawExcludedLandingBypassed?: boolean
+    rawInertialPositionPx?: number
+    rawRoundedTerminalPositionPx?: number
+    rawTerminalLandingWasExcluded?: boolean
+    resolvedEligibleTarget?: SpinTelemetryOptionSummary
+    terminalContinuationDistancePx?: number
+    terminalContinuationDistanceCards?: number
+    terminalContinuationDurationMs?: number
+    terminalContinuationWasLong?: boolean
+    terminalContinuationStartedBeforeStop?: boolean
     eligibilityMovementWasLong?: boolean
     eligibilityAdjustmentApplied?: boolean
     eligibilityAdjustmentReason?:

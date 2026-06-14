@@ -281,7 +281,7 @@ describe('option exclusion domain logic', () => {
     expect(resolved?.eligibilityExtensionCards).toBe(0)
   })
 
-  it('chooses closer reverse eligible target over far same-direction target', () => {
+  it('chooses next eligible target in spin direction even when reverse target is closer', () => {
     const options = ['a', 'b', 'c', 'd', 'e', 'f'].map(testOption)
     const state = createSession([
       { optionId: options[0].id, displayMode: 'show-disabled' },
@@ -298,14 +298,19 @@ describe('option exclusion domain logic', () => {
     })
 
     expect(resolved?.candidateOption.id).toBe(options[3].id)
-    expect(resolved?.option.id).toBe(options[2].id)
-    expect(resolved?.chosenTargetDirection).toBe('reverse-direction')
-    expect(resolved?.directionPreferredOption?.id).toBe(options[5].id)
-    expect(resolved?.nearestEligibleDistanceCards).toBe(1)
+    expect(resolved?.option.id).toBe(options[5].id)
+    expect(resolved?.targetSelectionPolicy).toBe('directional-eligible')
+    expect(resolved?.chosenTargetDirection).toBe('same-direction')
+    expect(resolved?.directionPreserved).toBe(true)
+    expect(resolved?.reverseDirectionCandidateIgnored).toBe(true)
+    expect(resolved?.reverseDirectionOption?.id).toBe(options[2].id)
+    expect(resolved?.reverseDirectionDistanceCards).toBe(1)
     expect(resolved?.directionPreferredDistanceCards).toBe(2)
+    expect(resolved?.terminalContinuationDistancePx).toBe(200)
+    expect(resolved?.terminalContinuationDistanceCards).toBe(2)
   })
 
-  it('uses spin direction as a near-tie breaker', () => {
+  it('uses the same spin direction when eligible targets are equally distant', () => {
     const options = ['a', 'b', 'c', 'd', 'e', 'f'].map(testOption)
     const state = createSession([
       { optionId: options[0].id, displayMode: 'show-disabled' },
@@ -322,11 +327,13 @@ describe('option exclusion domain logic', () => {
     })
 
     expect(resolved?.option.id).toBe(options[3].id)
-    expect(resolved?.targetSelectionPolicy).toBe('direction-tie-break')
-    expect(resolved?.chosenTargetDirection).toBe('tie')
+    expect(resolved?.targetSelectionPolicy).toBe('directional-eligible')
+    expect(resolved?.chosenTargetDirection).toBe('same-direction')
+    expect(resolved?.reverseDirectionCandidateIgnored).toBe(false)
+    expect(resolved?.reverseDirectionOption?.id).toBe(options[1].id)
   })
 
-  it('prevents slow spins from receiving long same-direction forced extensions', () => {
+  it('preserves spin direction for long terminal continuation instead of reversing', () => {
     const options = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map(testOption)
     const candidateOption = options[2]
     const closerReverseOption = options[1]
@@ -347,10 +354,35 @@ describe('option exclusion domain logic', () => {
 
     expect(candidateOption.id).toBe(options[2].id)
     expect(resolved?.candidateWasExcluded).toBe(true)
-    expect(resolved?.option.id).toBe(closerReverseOption.id)
-    expect(resolved?.directionPreferredOption?.id).toBe(farSameDirectionOption.id)
-    expect(resolved?.nearestEligibleDistanceCards).toBe(1)
+    expect(resolved?.option.id).toBe(farSameDirectionOption.id)
+    expect(resolved?.reverseDirectionOption?.id).toBe(closerReverseOption.id)
+    expect(resolved?.reverseDirectionCandidateIgnored).toBe(true)
+    expect(resolved?.directionPreserved).toBe(true)
+    expect(resolved?.terminalContinuationDistancePx).toBe(600)
+    expect(resolved?.terminalContinuationDistanceCards).toBe(6)
     expect(resolved?.directionPreferredDistanceCards).toBe(6)
+  })
+
+  it('uses negative continuation distance for downward spins', () => {
+    const options = ['a', 'b', 'c', 'd', 'e'].map(testOption)
+    const state = createSession([
+      { optionId: options[1].id, displayMode: 'show-disabled' },
+      { optionId: options[2].id, displayMode: 'show-disabled' },
+      { optionId: options[4].id, displayMode: 'show-disabled' },
+    ])
+    const resolved = resolveTerminalEligibleTarget({
+      options,
+      sessionState: state,
+      rawPositionPx: 200,
+      cardStepPx: 100,
+      spinDirection: -1,
+    })
+
+    expect(resolved?.candidateOption.id).toBe(options[2].id)
+    expect(resolved?.option.id).toBe(options[0].id)
+    expect(resolved?.chosenTargetDirection).toBe('same-direction')
+    expect(resolved?.terminalContinuationDistancePx).toBe(-200)
+    expect(resolved?.terminalContinuationDistanceCards).toBe(2)
   })
 
   it('reconciles excluded session state for config fingerprint and option ids', () => {

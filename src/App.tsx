@@ -27,6 +27,7 @@ import {
   validateAskAllowedDecisions,
 } from './domain/optionExclusion'
 import {
+  calculateTerminalContinuationDurationMs,
   calculateTerminalSettleDurationMs,
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
@@ -1142,7 +1143,18 @@ function SpinScreen({
       outcome.kind === 'spin'
         ? finalPositionPx - inertialPositionPx
         : outcome.finalPositionPx - positionRef.current
-    const snapDurationMs = calculateTerminalSettleDurationMs(finalSnapDistancePx)
+    const terminalContinuationDistancePx =
+      outcome.kind === 'spin' ? terminalTarget?.terminalContinuationDistancePx ?? 0 : 0
+    const terminalContinuationDistanceCards =
+      outcome.kind === 'spin' ? terminalTarget?.terminalContinuationDistanceCards ?? 0 : 0
+    const terminalContinuationDurationMs =
+      outcome.kind === 'spin' && terminalContinuationDistancePx !== 0
+        ? calculateTerminalContinuationDurationMs(finalSnapDistancePx, cardStepPx)
+        : 0
+    const snapDurationMs =
+      outcome.kind === 'spin' && terminalContinuationDistancePx !== 0
+        ? terminalContinuationDurationMs
+        : calculateTerminalSettleDurationMs(finalSnapDistancePx)
     const result =
       outcome.kind === 'spin'
         ? terminalTarget?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
@@ -1179,16 +1191,17 @@ function SpinScreen({
             : 'no-eligible-options'
     const eligibilityAdjustmentDirection =
       outcome.kind === 'spin' && eligibilityExtensionPx !== 0
-        ? terminalTarget?.chosenTargetDirection === 'reverse-direction'
-          ? 'backward'
-          : 'forward'
+        ? spinDirection >= 0
+          ? 'forward'
+          : 'backward'
         : 'none'
     const finalSnapDistanceCards =
       outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
     const finalSettleAnimated = snapDurationMs > 0
     const finalSettleDistanceCards =
       outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
-    const eligibilityMovementWasLong = eligibilityExtensionCards > 1.5
+    const eligibilityMovementWasLong = terminalContinuationDistanceCards > 1.5
+    const terminalContinuationWasLong = terminalContinuationDistanceCards > 1.5
 
     if (debugLogger.isEnabled()) {
       if (outcome.kind === 'snap') {
@@ -1299,7 +1312,7 @@ function SpinScreen({
             ),
             candidateWasExcluded,
             adjustedDueToExclusion: candidateWasExcluded,
-            targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'nearest-eligible',
+            targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'raw-active',
             localEligibleTargetSelectionApplied:
               terminalTarget?.localEligibleTargetSelectionApplied ?? false,
             rawTerminalLandingPositionPx: outcome.finalPositionPx,
@@ -1323,7 +1336,38 @@ function SpinScreen({
                   },
             ),
             directionPreferredDistanceCards: terminalTarget?.directionPreferredDistanceCards,
+            reverseDirectionCandidate: getTelemetryOptionSummary(
+              terminalTarget?.reverseDirectionOption,
+              terminalTarget?.reverseDirectionIndex,
+              terminalTarget?.reverseDirectionPositionPx === undefined
+                ? undefined
+                : {
+                    positionPx: terminalTarget.reverseDirectionPositionPx,
+                  },
+            ),
+            reverseDirectionCandidateDistanceCards:
+              terminalTarget?.reverseDirectionDistanceCards,
             chosenTargetDirection: terminalTarget?.chosenTargetDirection ?? 'none',
+            directionPreserved: terminalTarget?.directionPreserved ?? true,
+            reverseDirectionCandidateIgnored:
+              terminalTarget?.reverseDirectionCandidateIgnored ?? false,
+            rawExcludedLandingBypassed: terminalTarget?.rawExcludedLandingBypassed ?? false,
+            rawInertialPositionPx: outcome.inertialPositionPx,
+            rawRoundedTerminalPositionPx: outcome.finalPositionPx,
+            rawTerminalLandingWasExcluded: candidateWasExcluded,
+            resolvedEligibleTarget: getTelemetryOptionSummary(
+              terminalTarget?.option ?? result,
+              terminalTarget?.index ?? rawCandidateIndex,
+              {
+                ...adjustedTelemetry,
+                positionPx: finalPositionPx,
+              },
+            ),
+            terminalContinuationDistancePx,
+            terminalContinuationDistanceCards,
+            terminalContinuationDurationMs,
+            terminalContinuationWasLong,
+            terminalContinuationStartedBeforeStop: terminalContinuationDistancePx !== 0,
             eligibilityMovementWasLong,
             eligibilityAdjustmentApplied: eligibilityExtensionPx !== 0,
             eligibilityAdjustmentReason,
@@ -1357,6 +1401,40 @@ function SpinScreen({
       projectedTravelPx: outcome.kind === 'spin' ? outcome.projectedTravelPx : undefined,
       decelerationDurationMs: outcome.kind === 'spin' ? outcome.inertialDurationMs : undefined,
       finalSnapDistancePx,
+      rawPhysicalOutcome:
+        outcome.kind === 'spin'
+          ? {
+              rawInertialPositionPx: outcome.inertialPositionPx,
+              rawRoundedTerminalPositionPx: outcome.finalPositionPx,
+              rawTerminalLandingCandidate: getTelemetryOptionSummary(
+                rawCandidate,
+                rawCandidateIndex,
+                {
+                  ...rawCandidateTelemetry,
+                  positionPx: terminalTarget?.candidatePositionPx ?? outcome.finalPositionPx,
+                },
+              ),
+              projectedTravelPx: outcome.projectedTravelPx,
+            }
+          : undefined,
+      resolvedEligibleOutcome:
+        outcome.kind === 'spin'
+          ? {
+              finalPositionPx,
+              selectedResult: getTelemetryOptionSummary(
+                result,
+                terminalTarget?.index ?? rawCandidateIndex,
+                {
+                  ...adjustedTelemetry,
+                  positionPx: finalPositionPx,
+                },
+              ),
+              targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'raw-active',
+              directionPreserved: terminalTarget?.directionPreserved ?? true,
+              terminalContinuationDistancePx,
+              terminalContinuationDurationMs,
+            }
+          : undefined,
     })
 
     if (result) {

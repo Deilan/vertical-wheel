@@ -154,9 +154,12 @@ describe('spin telemetry helpers', () => {
           positionPx: 500,
         },
         rawLandingCandidateExcluded: true,
-        targetSelectionPolicy: 'nearest-eligible',
+        targetSelectionPolicy: 'directional-eligible',
         localEligibleTargetSelectionApplied: true,
+        rawInertialPositionPx: 580,
+        rawRoundedTerminalPositionPx: 500,
         rawTerminalLandingPositionPx: 500,
+        rawTerminalLandingWasExcluded: true,
         nearestEligibleTarget: {
           id: 'a',
           title: 'Активная',
@@ -168,7 +171,34 @@ describe('spin telemetry helpers', () => {
         },
         nearestEligibleDistancePx: 100,
         nearestEligibleDistanceCards: 1,
+        directionPreserved: true,
+        reverseDirectionCandidateIgnored: true,
+        reverseDirectionCandidate: {
+          id: 'c',
+          title: 'Обратная',
+          originalIndex: 2,
+          visibleIndex: 2,
+          active: true,
+          excluded: false,
+          positionPx: 400,
+        },
+        reverseDirectionCandidateDistanceCards: 1,
         chosenTargetDirection: 'same-direction',
+        rawExcludedLandingBypassed: true,
+        resolvedEligibleTarget: {
+          id: 'a',
+          title: 'Активная',
+          originalIndex: 0,
+          visibleIndex: 0,
+          active: true,
+          excluded: false,
+          positionPx: 600,
+        },
+        terminalContinuationDistancePx: 100,
+        terminalContinuationDistanceCards: 1,
+        terminalContinuationDurationMs: 420,
+        terminalContinuationWasLong: false,
+        terminalContinuationStartedBeforeStop: true,
         eligibilityMovementWasLong: false,
         adjustedEligibleOption: {
           id: 'a',
@@ -212,7 +242,11 @@ describe('spin telemetry helpers', () => {
     })
 
     expect(report.valid?.eligibilityAdjustmentReason).toBe('candidate-excluded')
-    expect(report.valid?.targetSelectionPolicy).toBe('nearest-eligible')
+    expect(report.valid?.targetSelectionPolicy).toBe('directional-eligible')
+    expect(report.valid?.directionPreserved).toBe(true)
+    expect(report.valid?.reverseDirectionCandidateIgnored).toBe(true)
+    expect(report.valid?.terminalContinuationDistanceCards).toBe(1)
+    expect(report.valid?.resolvedEligibleTarget?.id).toBe('a')
     expect(report.valid?.finalSettleAnimated).toBe(true)
     expect(report.valid?.finalSnapWasLarge).toBe(false)
     expect(JSON.stringify(report)).not.toContain('data:image/')

@@ -92,6 +92,35 @@ export function calculateTerminalSettleDurationMs(distancePx: number): number {
   return Math.round(clamp(320 + ((distance - 48) / 96) * 140, 320, 460))
 }
 
+export function calculateTerminalContinuationDurationMs(
+  distancePx: number,
+  cardStepPx: number,
+): number {
+  if (cardStepPx <= 0) {
+    throw new Error('Шаг карточки должен быть положительным.')
+  }
+
+  const distanceCards = Math.abs(distancePx / cardStepPx)
+
+  if (distanceCards <= 0.5) {
+    return calculateTerminalSettleDurationMs(distancePx)
+  }
+
+  if (distanceCards <= 1.5) {
+    return Math.round(clamp(320 + ((distanceCards - 0.5) / 1) * 200, 320, 520))
+  }
+
+  if (distanceCards <= 2.5) {
+    return Math.round(clamp(520 + ((distanceCards - 1.5) / 1) * 240, 520, 760))
+  }
+
+  if (distanceCards <= 5) {
+    return Math.round(clamp(760 + ((distanceCards - 2.5) / 2.5) * 340, 760, 1100))
+  }
+
+  return 1280
+}
+
 export function isValidSpinGesture(
   dragDistancePx: number,
   releaseVelocityPxPerSec: number,

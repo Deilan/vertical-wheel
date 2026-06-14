@@ -188,7 +188,7 @@
   Ожидаемый результат: исключенная опция остается видимой как недоступная, но не становится результатом.
 
 - [ ] В режиме visible-disabled выполнить несколько spin.
-  Ожидаемый результат: если финальная цель могла попасть на disabled-опцию, результат сдвигается к ближайшей активной опции по направлению spin.
+  Ожидаемый результат: если физическая финальная цель попадает на disabled-опцию, барабан продолжает движение в исходном направлении spin до первой активной опции; disabled-опция не становится результатом.
 
 - [ ] Нажать «Исключить из следующих вращений» для результата, который остался active.
   Ожидаемый результат: опция исключается без удаления из конфига.
@@ -343,16 +343,16 @@
   Ожидаемый результат: скачивается JSON-файл `vertical-wheel-spin-reports-...json` со всеми spin reports; если отчетов нет, файл содержит пустой структурированный список.
 
 - [ ] Проверить spin с excluded опциями в режиме «Показывать недоступными» и скопировать последний spin report.
-  Ожидаемый результат: если raw candidate был excluded, в отчёте видны `rawPhysicalLandingCandidate`, `eligibilityAdjustmentReason`, `eligibilityExtensionCards`, `eligibilityExtensionPx`, `finalSnapDistanceCards` и выбранный active result.
+  Ожидаемый результат: если raw candidate был excluded, в отчёте видны `rawPhysicalLandingCandidate`, `rawPhysicalOutcome`, `resolvedEligibleOutcome`, `targetSelectionPolicy: "directional-eligible"`, `directionPreserved: true`, `terminalContinuationDistanceCards`, `terminalContinuationDurationMs`, возможный `reverseDirectionCandidateIgnored` и выбранный active result.
 
 - [ ] Оценить субъективное ощущение spin с excluded опциями.
   Ожидаемый результат: тестер записывает `feltSlip: yes/no`, `feltNatural: 1–5` и короткий комментарий; недоступные карточки могут проходить под указателем, но не становятся результатом.
 
 - [ ] Проверить slow-with-exclusions regression: режим «Показывать недоступными», много excluded опций, примерно 3 active опции, медленный валидный spin.
-  Ожидаемый результат: барабан не скользит через много excluded карточек только ради следующей active опции по направлению; target выбирается как ближайшая eligible карточка, а в spin report записаны `nearestEligibleDistanceCards` и `chosenTargetDirection`.
+  Ожидаемый результат: если raw terminal candidate excluded, итоговая цель выбирается только в исходном направлении spin, даже если обратная active карточка ближе; в spin report записаны `chosenTargetDirection: "same-direction"`, `directionPreserved: true`, `reverseDirectionCandidateIgnored` и `terminalContinuationDistanceCards`.
 
 - [ ] Проверить финальное центрирование на weak / slow / medium / quick жестах.
-  Ожидаемый результат: нет заметного прыжка в центр карточки; записать `feltJump: yes/no`, `feltSlip: yes/no`, `finalSettleDurationMs`, `nearestEligibleDistanceCards`, `chosenTargetDirection`.
+  Ожидаемый результат: нет заметного обратного отката к карточке позади исходного направления; финальное центрирование локальное после terminal continuation; записать `feltJump: yes/no`, `feltSlip: yes/no`, `terminalContinuationDurationMs`, `terminalContinuationDistanceCards`, `finalSettleDurationMs`, `chosenTargetDirection`.
 
 - [ ] Выполнить несколько spin и нажать «Скопировать все spin reports».
   Ожидаемый результат: копируется список отчетов для анализа физики; эти отчеты нужны для последующей настройки ощущения вращения.

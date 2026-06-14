@@ -307,15 +307,12 @@ export function adjustLandingPositionToEligibleOption({
 
 export type TerminalEligibleTargetSelectionPolicy =
   | 'raw-active'
-  | 'nearest-eligible'
-  | 'direction-tie-break'
+  | 'directional-eligible'
   | 'weak-snap'
   | 'locked'
 
 export type TerminalEligibleTargetDirection =
   | 'same-direction'
-  | 'reverse-direction'
-  | 'tie'
   | 'none'
 
 export type TerminalEligibleTargetResolution = {
@@ -334,6 +331,15 @@ export type TerminalEligibleTargetResolution = {
   directionPreferredOption?: WheelOption
   directionPreferredPositionPx?: number
   directionPreferredDistanceCards?: number
+  reverseDirectionCandidateIgnored: boolean
+  reverseDirectionIndex?: number
+  reverseDirectionOption?: WheelOption
+  reverseDirectionPositionPx?: number
+  reverseDirectionDistanceCards?: number
+  directionPreserved: boolean
+  rawExcludedLandingBypassed: boolean
+  terminalContinuationDistancePx: number
+  terminalContinuationDistanceCards: number
   chosenTargetDirection: TerminalEligibleTargetDirection
   eligibilityExtensionCards: number
   eligibilityExtensionPx: number
@@ -345,14 +351,12 @@ export function resolveTerminalEligibleTarget({
   rawPositionPx,
   cardStepPx,
   spinDirection,
-  nearTieToleranceCards = 0.2,
 }: {
   options: WheelOption[]
   sessionState: WheelSessionState
   rawPositionPx: number
   cardStepPx: number
   spinDirection: number
-  nearTieToleranceCards?: number
 }): TerminalEligibleTargetResolution | undefined {
   if (cardStepPx <= 0) {
     throw new Error('Шаг карточки должен быть положительным.')
@@ -382,6 +386,11 @@ export function resolveTerminalEligibleTarget({
       localEligibleTargetSelectionApplied: false,
       nearestEligibleDistancePx: 0,
       nearestEligibleDistanceCards: 0,
+      reverseDirectionCandidateIgnored: false,
+      directionPreserved: true,
+      rawExcludedLandingBypassed: false,
+      terminalContinuationDistancePx: 0,
+      terminalContinuationDistanceCards: 0,
       chosenTargetDirection: 'none',
       eligibilityExtensionCards: 0,
       eligibilityExtensionPx: 0,
@@ -421,32 +430,24 @@ export function resolveTerminalEligibleTarget({
       direction >= 0 ? target.signedDistanceCards >= 0 : target.signedDistanceCards <= 0,
     )
     .sort((left, right) => left.absoluteDistanceCards - right.absoluteDistanceCards)
-  const directionPreferredTarget = sameDirectionTargets[0]
-  const nearestDistanceCards = Math.min(
-    ...eligibleTargets.map((target) => target.absoluteDistanceCards),
-  )
-  const nearestTargets = eligibleTargets
-    .filter(
-      (target) =>
-        target.absoluteDistanceCards <= nearestDistanceCards + Math.max(nearTieToleranceCards, 0),
+  const reverseDirectionTargets = eligibleTargets
+    .filter((target) =>
+      direction >= 0 ? target.signedDistanceCards < 0 : target.signedDistanceCards > 0,
     )
     .sort((left, right) => left.absoluteDistanceCards - right.absoluteDistanceCards)
-  const sameDirectionNearTarget = nearestTargets.find((target) =>
-    direction >= 0 ? target.signedDistanceCards >= 0 : target.signedDistanceCards <= 0,
-  )
-  const chosenTarget = sameDirectionNearTarget ?? nearestTargets[0]
-  const exactNearestTargets = eligibleTargets.filter(
-    (target) => target.absoluteDistanceCards === nearestDistanceCards,
-  )
-  const hasExactTie = exactNearestTargets.length > 1
+  const chosenTarget = sameDirectionTargets[0]
+  const reverseDirectionTarget = reverseDirectionTargets[0]
+
+  if (!chosenTarget) {
+    return undefined
+  }
+
   const chosenTargetDirection =
     chosenTarget.signedDistanceCards === 0
       ? 'none'
-      : hasExactTie
-        ? 'tie'
-        : Math.sign(chosenTarget.signedDistanceCards) === direction
-          ? 'same-direction'
-          : 'reverse-direction'
+      : 'same-direction'
+  const terminalContinuationDistancePx = chosenTarget.positionPx - candidatePositionPx
+  const terminalContinuationDistanceCards = Math.abs(terminalContinuationDistancePx / cardStepPx)
 
   return {
     positionPx: chosenTarget.positionPx,
@@ -456,20 +457,27 @@ export function resolveTerminalEligibleTarget({
     candidateOption,
     candidatePositionPx,
     candidateWasExcluded,
-    targetSelectionPolicy:
-      sameDirectionNearTarget &&
-      (sameDirectionNearTarget !== nearestTargets[0] || hasExactTie || nearestTargets.length > 1)
-        ? 'direction-tie-break'
-        : 'nearest-eligible',
+    targetSelectionPolicy: 'directional-eligible',
     localEligibleTargetSelectionApplied: true,
     nearestEligibleDistancePx: Math.abs(chosenTarget.positionPx - candidatePositionPx),
     nearestEligibleDistanceCards: chosenTarget.absoluteDistanceCards,
-    directionPreferredIndex: directionPreferredTarget?.index,
-    directionPreferredOption: directionPreferredTarget?.option,
-    directionPreferredPositionPx: directionPreferredTarget?.positionPx,
-    directionPreferredDistanceCards: directionPreferredTarget?.absoluteDistanceCards,
+    directionPreferredIndex: chosenTarget.index,
+    directionPreferredOption: chosenTarget.option,
+    directionPreferredPositionPx: chosenTarget.positionPx,
+    directionPreferredDistanceCards: chosenTarget.absoluteDistanceCards,
+    reverseDirectionCandidateIgnored:
+      reverseDirectionTarget !== undefined &&
+      reverseDirectionTarget.absoluteDistanceCards < chosenTarget.absoluteDistanceCards,
+    reverseDirectionIndex: reverseDirectionTarget?.index,
+    reverseDirectionOption: reverseDirectionTarget?.option,
+    reverseDirectionPositionPx: reverseDirectionTarget?.positionPx,
+    reverseDirectionDistanceCards: reverseDirectionTarget?.absoluteDistanceCards,
+    directionPreserved: true,
+    rawExcludedLandingBypassed: true,
+    terminalContinuationDistancePx,
+    terminalContinuationDistanceCards,
     chosenTargetDirection,
     eligibilityExtensionCards: chosenTarget.absoluteDistanceCards,
-    eligibilityExtensionPx: chosenTarget.positionPx - candidatePositionPx,
+    eligibilityExtensionPx: terminalContinuationDistancePx,
   }
 }

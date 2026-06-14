@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateSpinOutcome,
+  calculateTerminalContinuationDurationMs,
   calculateTerminalSettleDurationMs,
   defaultSpinPhysicsConfig,
   isValidSpinGesture,
@@ -150,8 +151,30 @@ describe('spin physics', () => {
     expect(calculateTerminalSettleDurationMs(48)).toBe(320)
   })
 
+  it('uses longer bounded durations for same-direction terminal continuation', () => {
+    expect(calculateTerminalContinuationDurationMs(25, 100)).toBe(
+      calculateTerminalSettleDurationMs(25),
+    )
+    expect(calculateTerminalContinuationDurationMs(100, 100)).toBeGreaterThanOrEqual(320)
+    expect(calculateTerminalContinuationDurationMs(100, 100)).toBeLessThanOrEqual(520)
+    expect(calculateTerminalContinuationDurationMs(200, 100)).toBeGreaterThanOrEqual(520)
+    expect(calculateTerminalContinuationDurationMs(200, 100)).toBeLessThanOrEqual(760)
+    expect(calculateTerminalContinuationDurationMs(400, 100)).toBeGreaterThanOrEqual(760)
+    expect(calculateTerminalContinuationDurationMs(400, 100)).toBeLessThanOrEqual(1100)
+    expect(calculateTerminalContinuationDurationMs(700, 100)).toBe(1280)
+  })
+
+  it('does not treat multi-card terminal continuation as a short final snap', () => {
+    expect(calculateTerminalContinuationDurationMs(180, 100)).toBeGreaterThan(
+      calculateTerminalSettleDurationMs(180),
+    )
+  })
+
   it('rejects nonpositive card steps', () => {
     expect(() => snapPositionToCard(100, 0)).toThrow('Шаг карточки должен быть положительным.')
+    expect(() => calculateTerminalContinuationDurationMs(100, 0)).toThrow(
+      'Шаг карточки должен быть положительным.',
+    )
     expect(() =>
       calculateSpinOutcome({
         currentPositionPx: 0,
