@@ -190,6 +190,9 @@
 - [ ] В режиме visible-disabled выполнить несколько spin.
   Ожидаемый результат: если физическая финальная цель попадает на disabled-опцию, барабан продолжает движение в исходном направлении spin до первой активной опции; disabled-опция не становится результатом.
 
+- [ ] В режиме visible-disabled выполнить слабый по ощущению, но валидный spin, где следующая active опция далеко.
+  Ожидаемый результат: нет принудительной прокрутки на много карточек после почти полной остановки; если энергии жеста недостаточно, результат не создаётся и история не обновляется.
+
 - [ ] Нажать «Исключить из следующих вращений» для результата, который остался active.
   Ожидаемый результат: опция исключается без удаления из конфига.
 
@@ -343,13 +346,19 @@
   Ожидаемый результат: скачивается JSON-файл `vertical-wheel-spin-reports-...json` со всеми spin reports; если отчетов нет, файл содержит пустой структурированный список.
 
 - [ ] Проверить spin с excluded опциями в режиме «Показывать недоступными» и скопировать последний spin report.
-  Ожидаемый результат: если raw candidate был excluded, в отчёте видны `rawPhysicalLandingCandidate`, `rawPhysicalOutcome`, `resolvedEligibleOutcome`, `targetSelectionPolicy: "directional-eligible"`, `directionPreserved: true`, `terminalContinuationDistanceCards`, `terminalContinuationDurationMs`, возможный `reverseDirectionCandidateIgnored` и выбранный active result.
+  Ожидаемый результат: если raw candidate был excluded, в отчёте видны `rawPhysicalLandingCandidate`, `rawPhysicalOutcome`, `resolvedEligibleOutcome`, `directionPreserved: true`, `continuationBudgetCards`, `continuationAllowed`, `continuationSuppressed`, `terminalContinuationDistanceCards`, `terminalContinuationDurationMs`, возможный `reverseDirectionCandidateIgnored` и выбранный active result либо `noResultReason`.
 
 - [ ] Оценить субъективное ощущение spin с excluded опциями.
   Ожидаемый результат: тестер записывает `feltSlip: yes/no`, `feltNatural: 1–5` и короткий комментарий; недоступные карточки могут проходить под указателем, но не становятся результатом.
 
 - [ ] Проверить slow-with-exclusions regression: режим «Показывать недоступными», много excluded опций, примерно 3 active опции, медленный валидный spin.
   Ожидаемый результат: если raw terminal candidate excluded, итоговая цель выбирается только в исходном направлении spin, даже если обратная active карточка ближе; в spin report записаны `chosenTargetDirection: "same-direction"`, `directionPreserved: true`, `reverseDirectionCandidateIgnored` и `terminalContinuationDistanceCards`.
+
+- [ ] Проверить insufficient-energy regression: режим «Показывать недоступными», active count около 2–4, слабый по ощущению валидный spin с далёкой следующей active опцией.
+  Ожидаемый результат: нет forced scroll на 5–9 карточек; `targetSelectionPolicy: "insufficient-energy-no-result"`, `continuationSuppressed: true`, `validGestureButNoResult: true`, `noResultReason: "insufficient-energy-for-eligible-continuation"`; `result_selection` отсутствует, история не меняется.
+
+- [ ] Проверить medium/strong spin с excluded raw candidate и более далёкой active опцией.
+  Ожидаемый результат: если энергии достаточно, происходит плавная `terminal_continuation_start` в исходном направлении, `final_snap_start` остаётся локальным и не содержит движение больше 0.5 карточки.
 
 - [ ] Проверить финальное центрирование на weak / slow / medium / quick жестах.
   Ожидаемый результат: нет заметного обратного отката к карточке позади исходного направления; финальное центрирование локальное после terminal continuation; записать `feltJump: yes/no`, `feltSlip: yes/no`, `terminalContinuationDurationMs`, `terminalContinuationDistanceCards`, `finalSettleDurationMs`, `chosenTargetDirection`.

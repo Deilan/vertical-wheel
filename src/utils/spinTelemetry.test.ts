@@ -199,6 +199,13 @@ describe('spin telemetry helpers', () => {
         terminalContinuationDurationMs: 420,
         terminalContinuationWasLong: false,
         terminalContinuationStartedBeforeStop: true,
+        continuationBudgetCards: 3,
+        continuationAllowed: true,
+        continuationSuppressed: false,
+        validGestureButNoResult: false,
+        finalCenteringDistancePx: 0,
+        finalCenteringDistanceCards: 0,
+        finalCenteringDurationMs: 0,
         eligibilityMovementWasLong: false,
         adjustedEligibleOption: {
           id: 'a',
@@ -246,9 +253,83 @@ describe('spin telemetry helpers', () => {
     expect(report.valid?.directionPreserved).toBe(true)
     expect(report.valid?.reverseDirectionCandidateIgnored).toBe(true)
     expect(report.valid?.terminalContinuationDistanceCards).toBe(1)
+    expect(report.valid?.continuationBudgetCards).toBe(3)
+    expect(report.valid?.continuationAllowed).toBe(true)
+    expect(report.valid?.continuationSuppressed).toBe(false)
     expect(report.valid?.resolvedEligibleTarget?.id).toBe('a')
     expect(report.valid?.finalSettleAnimated).toBe(true)
     expect(report.valid?.finalSnapWasLarge).toBe(false)
     expect(JSON.stringify(report)).not.toContain('data:image/')
+  })
+
+  it('reports valid gestures that intentionally produce no result after excluded landing', () => {
+    const report = createSpinTelemetryReport({
+      reportId: 'spin-suppressed',
+      timestamp: '2026-06-02T00:00:00.000Z',
+      classification: 'valid spin gesture',
+      dragDistancePx: 80,
+      dragDurationMs: 180,
+      releaseVelocityPxPerSecRaw: 700,
+      releaseVelocityPxPerSecAfterClamp: 700,
+      direction: 'down',
+      startPositionPx: 0,
+      releasePositionPx: -80,
+      cardStepPx: 100,
+      optionCount: 6,
+      visibleOptionCount: 6,
+      activeOptionCount: 2,
+      excludedOptionCount: 4,
+      thresholds: {
+        minDragDistancePx: 40,
+        minReleaseVelocityPxPerSec: 350,
+      },
+      pointerSamples: [],
+      frameSamples: [],
+      valid: {
+        initialVelocityPxPerSec: -700,
+        velocityClamp: {
+          minPxPerSec: 350,
+          maxPxPerSec: 4200,
+          wasClamped: false,
+        },
+        projectedTravelDistancePx: -360,
+        projectedTravelCards: 3.6,
+        actualAnimatedTravelDistancePx: -380,
+        decelerationDurationMs: 800,
+        totalSpinDurationMs: 1100,
+        finalSnapDistancePx: -20,
+        finalSnapDistanceCards: 0.2,
+        finalSnapWasLarge: false,
+        finalPositionBeforeSnapPx: -360,
+        finalSnappedPositionPx: -400,
+        rawLandingCandidateExcluded: true,
+        candidateWasExcluded: true,
+        adjustedDueToExclusion: true,
+        targetSelectionPolicy: 'insufficient-energy-no-result',
+        rawTerminalLandingWasExcluded: true,
+        terminalContinuationDistancePx: -600,
+        terminalContinuationDistanceCards: 6,
+        terminalContinuationDurationMs: 0,
+        terminalContinuationWasLong: true,
+        terminalContinuationStartedBeforeStop: false,
+        continuationBudgetCards: 1.5,
+        continuationAllowed: false,
+        continuationSuppressed: true,
+        validGestureButNoResult: true,
+        noResultReason: 'insufficient-energy-for-eligible-continuation',
+        finalCenteringDistancePx: -20,
+        finalCenteringDistanceCards: 0.2,
+        finalCenteringDurationMs: 180,
+        eligibilityAdjustmentApplied: false,
+        eligibilityAdjustmentReason: 'candidate-excluded',
+        eligibilityAdjustmentDirection: 'none',
+        safetyClampApplied: false,
+      },
+    })
+
+    expect(report.valid?.targetSelectionPolicy).toBe('insufficient-energy-no-result')
+    expect(report.valid?.validGestureButNoResult).toBe(true)
+    expect(report.valid?.selectedResult).toBeUndefined()
+    expect(report.valid?.noResultReason).toBe('insufficient-energy-for-eligible-continuation')
   })
 })

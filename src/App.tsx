@@ -31,6 +31,7 @@ import {
   calculateTerminalSettleDurationMs,
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
+  evaluateTerminalContinuationEnergy,
   snapPositionToCard,
 } from './domain/spinPhysics'
 import { createShareHash, readShareConfigFromHash } from './domain/shareConfig'
@@ -847,7 +848,8 @@ function SpinScreen({
     coastDurationMs,
     decelerationDurationMs,
     inertialDurationMs,
-    snapDurationMs,
+    terminalContinuationDurationMs,
+    finalCenteringDurationMs,
     result,
   }: {
     coastPositionPx: number
@@ -856,8 +858,9 @@ function SpinScreen({
     coastDurationMs: number
     decelerationDurationMs: number
     inertialDurationMs: number
-    snapDurationMs: number
-    result: WheelOption
+    terminalContinuationDurationMs: number
+    finalCenteringDurationMs: number
+    result?: WheelOption
   }) {
     if (animationTimerRef.current !== undefined) {
       window.clearTimeout(animationTimerRef.current)
@@ -882,8 +885,9 @@ function SpinScreen({
       coastDurationMs,
       decelerationDurationMs,
       inertialDurationMs,
-      snapDurationMs,
-      hasResult: true,
+      terminalContinuationDurationMs,
+      finalCenteringDurationMs,
+      hasResult: Boolean(result),
     })
     animationTimerRef.current = window.setTimeout(() => {
       setTransitionMs(decelerationDurationMs)
@@ -899,26 +903,65 @@ function SpinScreen({
         coastPositionPx,
         inertialPositionPx,
         decelerationDurationMs,
-        result: getOptionSummary(result),
+        result: result ? getOptionSummary(result) : undefined,
       })
       animationTimerRef.current = window.setTimeout(() => {
-        setTransitionMs(snapDurationMs)
-        setTransitionEasing(snapTransitionEasing)
-        setPositionPx(finalPositionPx)
-        startFrameSampling({
-          fromPositionPx: inertialPositionPx,
-          toPositionPx: finalPositionPx,
-          durationMs: snapDurationMs,
-          phase: 'final-snap',
-        })
-        debugLogger.log('spin', 'final_snap_start', {
-          inertialPositionPx,
-          finalPositionPx,
-          snapDistancePx: finalPositionPx - inertialPositionPx,
-          snapDurationMs,
-          result: getOptionSummary(result),
-        })
-        animationTimerRef.current = window.setTimeout(finishAnimation, snapDurationMs + 40)
+        const startFinalCentering = (fromPositionPx: number) => {
+          if (finalCenteringDurationMs <= 0) {
+            setTransitionMs(0)
+            setTransitionEasing(snapTransitionEasing)
+            setPositionPx(finalPositionPx)
+            animationTimerRef.current = window.setTimeout(finishAnimation, 40)
+            return
+          }
+
+          setTransitionMs(finalCenteringDurationMs)
+          setTransitionEasing(snapTransitionEasing)
+          setPositionPx(finalPositionPx)
+          startFrameSampling({
+            fromPositionPx,
+            toPositionPx: finalPositionPx,
+            durationMs: finalCenteringDurationMs,
+            phase: 'final-snap',
+          })
+          debugLogger.log('spin', 'final_snap_start', {
+            fromPositionPx,
+            finalPositionPx,
+            snapDistancePx: finalPositionPx - fromPositionPx,
+            snapDurationMs: finalCenteringDurationMs,
+            result: result ? getOptionSummary(result) : undefined,
+          })
+          animationTimerRef.current = window.setTimeout(
+            finishAnimation,
+            finalCenteringDurationMs + 40,
+          )
+        }
+
+        if (terminalContinuationDurationMs > 0) {
+          setTransitionMs(terminalContinuationDurationMs)
+          setTransitionEasing(spinTransitionEasing)
+          setPositionPx(finalPositionPx)
+          startFrameSampling({
+            fromPositionPx: inertialPositionPx,
+            toPositionPx: finalPositionPx,
+            durationMs: terminalContinuationDurationMs,
+            phase: 'terminal-continuation',
+          })
+          debugLogger.log('spin', 'terminal_continuation_start', {
+            inertialPositionPx,
+            finalPositionPx,
+            continuationDistancePx: finalPositionPx - inertialPositionPx,
+            continuationDurationMs: terminalContinuationDurationMs,
+            result: result ? getOptionSummary(result) : undefined,
+          })
+          animationTimerRef.current = window.setTimeout(
+            () => startFinalCentering(finalPositionPx),
+            terminalContinuationDurationMs + 40,
+          )
+          return
+        }
+
+        startFinalCentering(inertialPositionPx)
       }, decelerationDurationMs + 40)
     }, coastDurationMs + 40)
   }
@@ -1126,11 +1169,6 @@ function SpinScreen({
             spinDirection,
           })
         : undefined
-    const finalPositionPx = terminalTarget?.positionPx ?? outcome.finalPositionPx
-    const eligibilityExtensionPx =
-      outcome.kind === 'spin' ? terminalTarget?.eligibilityExtensionPx ?? 0 : 0
-    const eligibilityExtensionCards =
-      outcome.kind === 'spin' ? terminalTarget?.eligibilityExtensionCards ?? 0 : 0
     const coastPositionPx =
       outcome.kind === 'spin'
         ? outcome.coastPositionPx
@@ -1139,26 +1177,6 @@ function SpinScreen({
       outcome.kind === 'spin'
         ? outcome.inertialPositionPx
         : outcome.finalPositionPx
-    const finalSnapDistancePx =
-      outcome.kind === 'spin'
-        ? finalPositionPx - inertialPositionPx
-        : outcome.finalPositionPx - positionRef.current
-    const terminalContinuationDistancePx =
-      outcome.kind === 'spin' ? terminalTarget?.terminalContinuationDistancePx ?? 0 : 0
-    const terminalContinuationDistanceCards =
-      outcome.kind === 'spin' ? terminalTarget?.terminalContinuationDistanceCards ?? 0 : 0
-    const terminalContinuationDurationMs =
-      outcome.kind === 'spin' && terminalContinuationDistancePx !== 0
-        ? calculateTerminalContinuationDurationMs(finalSnapDistancePx, cardStepPx)
-        : 0
-    const snapDurationMs =
-      outcome.kind === 'spin' && terminalContinuationDistancePx !== 0
-        ? terminalContinuationDurationMs
-        : calculateTerminalSettleDurationMs(finalSnapDistancePx)
-    const result =
-      outcome.kind === 'spin'
-        ? terminalTarget?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
-        : undefined
     const rawCandidateIndex =
       outcome.kind === 'spin'
         ? terminalTarget?.candidateIndex ??
@@ -1171,6 +1189,60 @@ function SpinScreen({
       ? terminalTarget?.candidateWasExcluded ??
         getExcludedOptionDisplayMode(rawCandidate.id, sessionState) !== undefined
       : false
+    const requestedTerminalContinuationDistancePx =
+      outcome.kind === 'spin' ? terminalTarget?.terminalContinuationDistancePx ?? 0 : 0
+    const requestedTerminalContinuationDistanceCards =
+      outcome.kind === 'spin' ? terminalTarget?.terminalContinuationDistanceCards ?? 0 : 0
+    const continuationEnergy =
+      outcome.kind === 'spin'
+        ? evaluateTerminalContinuationEnergy({
+            releaseVelocityPxPerSecAfterClamp: outcome.clampedReleaseVelocityPxPerSec,
+            projectedTravelCards: outcome.virtualCardsToTravel,
+            terminalContinuationDistanceCards: requestedTerminalContinuationDistanceCards,
+          })
+        : undefined
+    const continuationSuppressed =
+      outcome.kind === 'spin' &&
+      candidateWasExcluded &&
+      (continuationEnergy?.continuationSuppressed ?? false)
+    const finalPositionPx = continuationSuppressed
+      ? outcome.finalPositionPx
+      : terminalTarget?.positionPx ?? outcome.finalPositionPx
+    const resolvedEligiblePositionPx = terminalTarget?.positionPx ?? finalPositionPx
+    const terminalContinuationDistancePx =
+      outcome.kind === 'spin' && !continuationSuppressed
+        ? requestedTerminalContinuationDistancePx
+        : 0
+    const terminalContinuationDistanceCards =
+      outcome.kind === 'spin' && !continuationSuppressed
+        ? requestedTerminalContinuationDistanceCards
+        : 0
+    const finalCenteringDistancePx =
+      outcome.kind === 'spin'
+        ? terminalContinuationDistancePx !== 0
+          ? 0
+          : finalPositionPx - inertialPositionPx
+        : outcome.finalPositionPx - positionRef.current
+    const finalCenteringDistanceCards =
+      outcome.kind === 'spin' ? Math.abs(finalCenteringDistancePx / cardStepPx) : undefined
+    const finalCenteringDurationMs = calculateTerminalSettleDurationMs(finalCenteringDistancePx)
+    const terminalContinuationDurationMs =
+      outcome.kind === 'spin' && terminalContinuationDistancePx !== 0
+        ? calculateTerminalContinuationDurationMs(terminalContinuationDistancePx, cardStepPx)
+        : 0
+    const snapDurationMs = finalCenteringDurationMs
+    const result =
+      outcome.kind === 'spin' && !continuationSuppressed
+        ? terminalTarget?.option ?? getWinningOption(visibleOptions, finalPositionPx, cardStepPx)
+        : undefined
+    const eligibilityExtensionPx =
+      outcome.kind === 'spin' && !continuationSuppressed
+        ? terminalTarget?.eligibilityExtensionPx ?? 0
+        : 0
+    const eligibilityExtensionCards =
+      outcome.kind === 'spin' && !continuationSuppressed
+        ? terminalTarget?.eligibilityExtensionCards ?? 0
+        : 0
     const rawCandidateTelemetry = rawCandidate
       ? visibleOptionTelemetryById.get(rawCandidate.id)
       : undefined
@@ -1195,13 +1267,12 @@ function SpinScreen({
           ? 'forward'
           : 'backward'
         : 'none'
-    const finalSnapDistanceCards =
-      outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
+    const finalSnapDistancePx = finalCenteringDistancePx
+    const finalSnapDistanceCards = finalCenteringDistanceCards
     const finalSettleAnimated = snapDurationMs > 0
-    const finalSettleDistanceCards =
-      outcome.kind === 'spin' ? Math.abs(finalSnapDistancePx / cardStepPx) : undefined
+    const finalSettleDistanceCards = finalCenteringDistanceCards
     const eligibilityMovementWasLong = terminalContinuationDistanceCards > 1.5
-    const terminalContinuationWasLong = terminalContinuationDistanceCards > 1.5
+    const terminalContinuationWasLong = requestedTerminalContinuationDistanceCards > 1.5
 
     if (debugLogger.isEnabled()) {
       if (outcome.kind === 'snap') {
@@ -1279,11 +1350,13 @@ function SpinScreen({
             actualAnimatedTravelDistancePx: finalPositionPx - releasePositionPx,
             coastDurationMs: outcome.coastDurationMs,
             decelerationDurationMs: outcome.decelerationDurationMs,
-            totalSpinDurationMs: outcome.inertialDurationMs + snapDurationMs,
+            totalSpinDurationMs:
+              outcome.inertialDurationMs + terminalContinuationDurationMs + snapDurationMs,
             finalSnapDistancePx,
             finalSnapDistanceCards,
             finalSnapWasLarge: finalSnapDistanceCards !== undefined && finalSnapDistanceCards > 0.5,
-            finalPositionBeforeSnapPx: inertialPositionPx,
+            finalPositionBeforeSnapPx:
+              terminalContinuationDurationMs > 0 ? finalPositionPx : inertialPositionPx,
             finalSnappedPositionPx: finalPositionPx,
             rawLandingCandidate: getTelemetryOptionSummary(rawCandidate, rawCandidateIndex, {
               ...rawCandidateTelemetry,
@@ -1299,7 +1372,7 @@ function SpinScreen({
               terminalTarget?.index ?? rawCandidateIndex,
               {
                 ...adjustedTelemetry,
-                positionPx: finalPositionPx,
+                positionPx: resolvedEligiblePositionPx,
               },
             ),
             selectedResult: getTelemetryOptionSummary(
@@ -1307,12 +1380,14 @@ function SpinScreen({
               terminalTarget?.index ?? rawCandidateIndex,
               {
                 ...adjustedTelemetry,
-                positionPx: finalPositionPx,
+                positionPx: resolvedEligiblePositionPx,
               },
             ),
             candidateWasExcluded,
             adjustedDueToExclusion: candidateWasExcluded,
-            targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'raw-active',
+            targetSelectionPolicy: continuationSuppressed
+              ? 'insufficient-energy-no-result'
+              : terminalTarget?.targetSelectionPolicy ?? 'raw-active',
             localEligibleTargetSelectionApplied:
               terminalTarget?.localEligibleTargetSelectionApplied ?? false,
             rawTerminalLandingPositionPx: outcome.finalPositionPx,
@@ -1321,7 +1396,7 @@ function SpinScreen({
               terminalTarget?.index ?? rawCandidateIndex,
               {
                 ...adjustedTelemetry,
-                positionPx: finalPositionPx,
+                positionPx: resolvedEligiblePositionPx,
               },
             ),
             nearestEligibleDistancePx: terminalTarget?.nearestEligibleDistancePx ?? 0,
@@ -1360,14 +1435,26 @@ function SpinScreen({
               terminalTarget?.index ?? rawCandidateIndex,
               {
                 ...adjustedTelemetry,
-                positionPx: finalPositionPx,
+                positionPx: resolvedEligiblePositionPx,
               },
             ),
-            terminalContinuationDistancePx,
-            terminalContinuationDistanceCards,
+            terminalContinuationDistancePx: continuationSuppressed
+              ? requestedTerminalContinuationDistancePx
+              : terminalContinuationDistancePx,
+            terminalContinuationDistanceCards: continuationSuppressed
+              ? requestedTerminalContinuationDistanceCards
+              : terminalContinuationDistanceCards,
             terminalContinuationDurationMs,
             terminalContinuationWasLong,
             terminalContinuationStartedBeforeStop: terminalContinuationDistancePx !== 0,
+            continuationBudgetCards: continuationEnergy?.continuationBudgetCards,
+            continuationAllowed: continuationEnergy?.continuationAllowed,
+            continuationSuppressed,
+            validGestureButNoResult: continuationSuppressed,
+            noResultReason: continuationEnergy?.noResultReason,
+            finalCenteringDistancePx,
+            finalCenteringDistanceCards,
+            finalCenteringDurationMs,
             eligibilityMovementWasLong,
             eligibilityAdjustmentApplied: eligibilityExtensionPx !== 0,
             eligibilityAdjustmentReason,
@@ -1377,11 +1464,13 @@ function SpinScreen({
             projectedPositionBeforeEligibilityAdjustmentPx:
               terminalTarget?.candidatePositionPx ?? outcome.finalPositionPx,
             projectedPositionAfterEligibilityAdjustmentPx: finalPositionPx,
-            positionBeforeFinalSnapPx: inertialPositionPx,
+            positionBeforeFinalSnapPx:
+              terminalContinuationDurationMs > 0 ? finalPositionPx : inertialPositionPx,
             totalTravelBeforeEligibilityExtensionPx: outcome.finalPositionPx - releasePositionPx,
             totalTravelAfterEligibilityExtensionPx: finalPositionPx - releasePositionPx,
             totalDurationBeforeEligibilityExtensionMs: outcome.durationMs,
-            totalDurationAfterEligibilityExtensionMs: outcome.inertialDurationMs + snapDurationMs,
+            totalDurationAfterEligibilityExtensionMs:
+              outcome.inertialDurationMs + terminalContinuationDurationMs + snapDurationMs,
             finalSettleAnimated,
             finalSettleDurationMs: snapDurationMs,
             finalSettleDistancePx: finalSnapDistancePx,
@@ -1426,13 +1515,26 @@ function SpinScreen({
                 terminalTarget?.index ?? rawCandidateIndex,
                 {
                   ...adjustedTelemetry,
-                  positionPx: finalPositionPx,
+                  positionPx: resolvedEligiblePositionPx,
                 },
               ),
-              targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'raw-active',
+              targetSelectionPolicy: continuationSuppressed
+                ? 'insufficient-energy-no-result'
+                : terminalTarget?.targetSelectionPolicy ?? 'raw-active',
               directionPreserved: terminalTarget?.directionPreserved ?? true,
-              terminalContinuationDistancePx,
+              terminalContinuationDistancePx: continuationSuppressed
+                ? requestedTerminalContinuationDistancePx
+                : terminalContinuationDistancePx,
+              terminalContinuationDistanceCards: continuationSuppressed
+                ? requestedTerminalContinuationDistanceCards
+                : terminalContinuationDistanceCards,
               terminalContinuationDurationMs,
+              continuationBudgetCards: continuationEnergy?.continuationBudgetCards,
+              continuationAllowed: continuationEnergy?.continuationAllowed,
+              continuationSuppressed,
+              validGestureButNoResult: continuationSuppressed,
+              noResultReason: continuationEnergy?.noResultReason,
+              finalCenteringDistancePx,
             }
           : undefined,
     })
@@ -1444,7 +1546,11 @@ function SpinScreen({
       })
     }
 
-    if (outcome.kind === 'spin' && result) {
+    if (continuationSuppressed) {
+      setResultStatus('Недостаточно силы, чтобы дойти до следующей активной опции.')
+    }
+
+    if (outcome.kind === 'spin') {
       animateSpinTo({
         coastPositionPx,
         inertialPositionPx,
@@ -1452,7 +1558,8 @@ function SpinScreen({
         coastDurationMs: outcome.coastDurationMs,
         decelerationDurationMs: outcome.decelerationDurationMs,
         inertialDurationMs: outcome.inertialDurationMs,
-        snapDurationMs,
+        terminalContinuationDurationMs,
+        finalCenteringDurationMs,
         result,
       })
       return

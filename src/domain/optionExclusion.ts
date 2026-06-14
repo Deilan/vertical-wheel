@@ -308,6 +308,7 @@ export function adjustLandingPositionToEligibleOption({
 export type TerminalEligibleTargetSelectionPolicy =
   | 'raw-active'
   | 'directional-eligible'
+  | 'insufficient-energy-no-result'
   | 'weak-snap'
   | 'locked'
 

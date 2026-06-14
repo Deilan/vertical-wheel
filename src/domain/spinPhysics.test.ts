@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  calculateContinuationBudgetCards,
   calculateSpinOutcome,
   calculateTerminalContinuationDurationMs,
   calculateTerminalSettleDurationMs,
   defaultSpinPhysicsConfig,
+  evaluateTerminalContinuationEnergy,
   isValidSpinGesture,
   projectInertialTravelPx,
   snapPositionToCard,
@@ -152,22 +154,92 @@ describe('spin physics', () => {
   })
 
   it('uses longer bounded durations for same-direction terminal continuation', () => {
-    expect(calculateTerminalContinuationDurationMs(25, 100)).toBe(
-      calculateTerminalSettleDurationMs(25),
-    )
+    expect(calculateTerminalContinuationDurationMs(25, 100)).toBeGreaterThanOrEqual(220)
+    expect(calculateTerminalContinuationDurationMs(75, 100)).toBe(420)
     expect(calculateTerminalContinuationDurationMs(100, 100)).toBeGreaterThanOrEqual(320)
-    expect(calculateTerminalContinuationDurationMs(100, 100)).toBeLessThanOrEqual(520)
-    expect(calculateTerminalContinuationDurationMs(200, 100)).toBeGreaterThanOrEqual(520)
-    expect(calculateTerminalContinuationDurationMs(200, 100)).toBeLessThanOrEqual(760)
-    expect(calculateTerminalContinuationDurationMs(400, 100)).toBeGreaterThanOrEqual(760)
-    expect(calculateTerminalContinuationDurationMs(400, 100)).toBeLessThanOrEqual(1100)
-    expect(calculateTerminalContinuationDurationMs(700, 100)).toBe(1280)
+    expect(calculateTerminalContinuationDurationMs(100, 100)).toBeLessThanOrEqual(700)
+    expect(calculateTerminalContinuationDurationMs(200, 100)).toBeGreaterThanOrEqual(700)
+    expect(calculateTerminalContinuationDurationMs(200, 100)).toBeLessThanOrEqual(1200)
+    expect(calculateTerminalContinuationDurationMs(400, 100)).toBeGreaterThanOrEqual(1200)
+    expect(calculateTerminalContinuationDurationMs(400, 100)).toBeLessThanOrEqual(2200)
+    expect(calculateTerminalContinuationDurationMs(700, 100)).toBe(2200)
   })
 
   it('does not treat multi-card terminal continuation as a short final snap', () => {
     expect(calculateTerminalContinuationDurationMs(180, 100)).toBeGreaterThan(
       calculateTerminalSettleDurationMs(180),
     )
+  })
+
+  it('calculates larger continuation budgets for stronger valid gestures', () => {
+    expect(
+      calculateContinuationBudgetCards({
+        releaseVelocityPxPerSecAfterClamp: 500,
+        projectedTravelCards: 3.5,
+      }),
+    ).toBe(1.5)
+    expect(
+      calculateContinuationBudgetCards({
+        releaseVelocityPxPerSecAfterClamp: 900,
+        projectedTravelCards: 4,
+      }),
+    ).toBe(3)
+    expect(
+      calculateContinuationBudgetCards({
+        releaseVelocityPxPerSecAfterClamp: 1800,
+        projectedTravelCards: 6,
+      }),
+    ).toBe(5)
+  })
+
+  it('suppresses long eligible continuation for weak-feeling valid spins', () => {
+    const energy = evaluateTerminalContinuationEnergy({
+      releaseVelocityPxPerSecAfterClamp: 700,
+      projectedTravelCards: 3.8,
+      terminalContinuationDistanceCards: 2,
+    })
+
+    expect(energy.continuationBudgetCards).toBe(1.5)
+    expect(energy.continuationAllowed).toBe(false)
+    expect(energy.continuationSuppressed).toBe(true)
+    expect(energy.validGestureButNoResult).toBe(true)
+    expect(energy.noResultReason).toBe('insufficient-energy-for-eligible-continuation')
+  })
+
+  it('allows nearby continuation for weak-feeling valid spins', () => {
+    const energy = evaluateTerminalContinuationEnergy({
+      releaseVelocityPxPerSecAfterClamp: 700,
+      projectedTravelCards: 3.8,
+      terminalContinuationDistanceCards: 1.25,
+    })
+
+    expect(energy.continuationAllowed).toBe(true)
+    expect(energy.continuationSuppressed).toBe(false)
+  })
+
+  it('allows larger continuation for medium and strong spins while suppressing extreme weak travel', () => {
+    expect(
+      evaluateTerminalContinuationEnergy({
+        releaseVelocityPxPerSecAfterClamp: 1200,
+        projectedTravelCards: 5,
+        terminalContinuationDistanceCards: 2.5,
+      }).continuationAllowed,
+    ).toBe(true)
+    expect(
+      evaluateTerminalContinuationEnergy({
+        releaseVelocityPxPerSecAfterClamp: 1200,
+        projectedTravelCards: 5,
+        terminalContinuationDistanceCards: 7,
+      }).continuationSuppressed,
+    ).toBe(true)
+  })
+
+  it('keeps long continuation speed bounded', () => {
+    const distancePx = 500
+    const durationMs = calculateTerminalContinuationDurationMs(distancePx, 100)
+    const speedPxPerSec = distancePx / (durationMs / 1000)
+
+    expect(speedPxPerSec).toBeLessThanOrEqual(260)
   })
 
   it('rejects nonpositive card steps', () => {

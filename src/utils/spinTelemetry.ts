@@ -1,4 +1,10 @@
-export type SpinTelemetryPhase = 'drag' | 'coast' | 'deceleration' | 'final-snap' | 'complete'
+export type SpinTelemetryPhase =
+  | 'drag'
+  | 'coast'
+  | 'deceleration'
+  | 'terminal-continuation'
+  | 'final-snap'
+  | 'complete'
 
 export type SpinTelemetryPointerSample = {
   timestampMs: number
@@ -104,6 +110,7 @@ export type SpinTelemetryReport = {
     targetSelectionPolicy?:
       | 'raw-active'
       | 'directional-eligible'
+      | 'insufficient-energy-no-result'
       | 'weak-snap'
       | 'locked'
     localEligibleTargetSelectionApplied?: boolean
@@ -128,6 +135,14 @@ export type SpinTelemetryReport = {
     terminalContinuationDurationMs?: number
     terminalContinuationWasLong?: boolean
     terminalContinuationStartedBeforeStop?: boolean
+    continuationBudgetCards?: number
+    continuationAllowed?: boolean
+    continuationSuppressed?: boolean
+    validGestureButNoResult?: boolean
+    noResultReason?: 'insufficient-energy-for-eligible-continuation'
+    finalCenteringDistancePx?: number
+    finalCenteringDistanceCards?: number
+    finalCenteringDurationMs?: number
     eligibilityMovementWasLong?: boolean
     eligibilityAdjustmentApplied?: boolean
     eligibilityAdjustmentReason?:

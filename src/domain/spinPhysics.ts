@@ -12,6 +12,20 @@ export type SpinPhysicsConfig = {
   finalSnapDurationMs: number
 }
 
+export type TerminalContinuationEnergyInput = {
+  releaseVelocityPxPerSecAfterClamp: number
+  projectedTravelCards: number
+  terminalContinuationDistanceCards: number
+}
+
+export type TerminalContinuationEnergyResult = {
+  continuationBudgetCards: number
+  continuationAllowed: boolean
+  continuationSuppressed: boolean
+  validGestureButNoResult: boolean
+  noResultReason?: 'insufficient-energy-for-eligible-continuation'
+}
+
 export type SpinCalculationInput = {
   currentPositionPx: number
   dragDistancePx: number
@@ -102,23 +116,63 @@ export function calculateTerminalContinuationDurationMs(
 
   const distanceCards = Math.abs(distancePx / cardStepPx)
 
-  if (distanceCards <= 0.5) {
-    return calculateTerminalSettleDurationMs(distancePx)
+  if (distanceCards <= 0) {
+    return 0
+  }
+
+  if (distanceCards <= 0.75) {
+    return Math.round(clamp(220 + (distanceCards / 0.75) * 200, 220, 420))
   }
 
   if (distanceCards <= 1.5) {
-    return Math.round(clamp(320 + ((distanceCards - 0.5) / 1) * 200, 320, 520))
+    return Math.round(clamp(420 + ((distanceCards - 0.75) / 0.75) * 280, 420, 700))
   }
 
-  if (distanceCards <= 2.5) {
-    return Math.round(clamp(520 + ((distanceCards - 1.5) / 1) * 240, 520, 760))
+  if (distanceCards <= 3) {
+    return Math.round(clamp(700 + ((distanceCards - 1.5) / 1.5) * 500, 700, 1200))
   }
 
-  if (distanceCards <= 5) {
-    return Math.round(clamp(760 + ((distanceCards - 2.5) / 2.5) * 340, 760, 1100))
+  return Math.round(clamp(1200 + ((Math.min(distanceCards, 5) - 3) / 2) * 1000, 1200, 2200))
+}
+
+export function calculateContinuationBudgetCards({
+  releaseVelocityPxPerSecAfterClamp,
+  projectedTravelCards,
+}: Pick<
+  TerminalContinuationEnergyInput,
+  'releaseVelocityPxPerSecAfterClamp' | 'projectedTravelCards'
+>): number {
+  const speed = Math.abs(releaseVelocityPxPerSecAfterClamp)
+
+  if (speed >= 1800 || projectedTravelCards >= 12) {
+    return 5
   }
 
-  return 1280
+  if (speed >= 900 && projectedTravelCards >= 4) {
+    return 3
+  }
+
+  return 1.5
+}
+
+export function evaluateTerminalContinuationEnergy(
+  input: TerminalContinuationEnergyInput,
+): TerminalContinuationEnergyResult {
+  const continuationBudgetCards = calculateContinuationBudgetCards(input)
+  const continuationAllowed =
+    input.terminalContinuationDistanceCards <= 0.75 ||
+    input.terminalContinuationDistanceCards <= continuationBudgetCards
+  const continuationSuppressed = !continuationAllowed
+
+  return {
+    continuationBudgetCards,
+    continuationAllowed,
+    continuationSuppressed,
+    validGestureButNoResult: continuationSuppressed,
+    noResultReason: continuationSuppressed
+      ? 'insufficient-energy-for-eligible-continuation'
+      : undefined,
+  }
 }
 
 export function isValidSpinGesture(
