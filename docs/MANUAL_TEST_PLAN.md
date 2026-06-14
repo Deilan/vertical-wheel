@@ -191,7 +191,7 @@
   Ожидаемый результат: если физическая финальная цель попадает на disabled-опцию, барабан продолжает движение в исходном направлении spin до первой активной опции; disabled-опция не становится результатом.
 
 - [ ] В режиме visible-disabled выполнить слабый по ощущению, но валидный spin, где следующая active опция далеко.
-  Ожидаемый результат: барабан не останавливается на excluded-опции и не делает поздний искусственный рывок; движение плавно дотягивается до следующей active опции в исходном направлении, результат создаётся и история обновляется один раз.
+  Ожидаемый результат: барабан не останавливается на excluded-опции и не делает поздний искусственный рывок; reduced-friction bypass плавно проводит ленту через excluded-опции к следующей active опции в исходном направлении, результат создаётся и история обновляется один раз.
 
 - [ ] Нажать «Исключить из следующих вращений» для результата, который остался active.
   Ожидаемый результат: опция исключается без удаления из конфига.
@@ -346,7 +346,7 @@
   Ожидаемый результат: скачивается JSON-файл `vertical-wheel-spin-reports-...json` со всеми spin reports; если отчетов нет, файл содержит пустой структурированный список.
 
 - [ ] Проверить spin с excluded опциями в режиме «Показывать недоступными» и скопировать последний spin report.
-  Ожидаемый результат: если raw candidate был excluded, в отчёте видны `rawPhysicalLandingCandidate`, `rawPhysicalOutcome`, `resolvedEligibleOutcome`, `targetSelectionPolicy: "directional-eligible"`, `directionPreserved: true`, `continuationSuppressed: false`, `validGestureButNoResult: false`, `rawExcludedWasNotVisualStop: true`, `integratedExcludedSettling: true`, `decelerationEndpointPolicy: "resolved-eligible-target"`, `terminalContinuationDistanceCards`, `terminalContinuationDurationMs`, возможный `reverseDirectionCandidateIgnored` и выбранный active result.
+  Ожидаемый результат: если raw candidate был excluded, в отчёте видны `physicsModelVersion: "E3G-friction-field"`, `excludedBypassMode: "friction-field"`, `targetSelectionPolicy: "directional-eligible-friction-field"`, `directionPreserved: true`, `continuationSuppressed: false`, `validGestureButNoResult: false`, `rawExcludedWasNotVisualStop: true`, `decelerationEndpointPolicy: "friction-field-resolved-eligible"`, `velocityMonotonicNonIncreasing: true`, `accelerationSpikeDetected: false` и выбранный active result.
 
 - [ ] Оценить субъективное ощущение spin с excluded опциями.
   Ожидаемый результат: тестер записывает `feltSlip: yes/no`, `feltNatural: 1–5` и короткий комментарий; недоступные карточки могут проходить под указателем, но не становятся результатом.
@@ -355,10 +355,10 @@
   Ожидаемый результат: если raw terminal candidate excluded, итоговая цель выбирается только в исходном направлении spin, даже если обратная active карточка ближе; в spin report записаны `chosenTargetDirection: "same-direction"`, `directionPreserved: true`, `reverseDirectionCandidateIgnored` и `terminalContinuationDistanceCards`.
 
 - [ ] Проверить дальнюю same-direction цель: режим «Показывать недоступными», active count около 2–4, слабый/средний валидный spin с далёкой следующей active опцией.
-  Ожидаемый результат: нет no-result только из-за далёкой eligible-цели; `targetSelectionPolicy: "directional-eligible"`, `continuationSuppressed: false`, `validGestureButNoResult: false`, `selectedResult` заполнен, `result_selection` есть, история получает одну запись.
+  Ожидаемый результат: нет no-result только из-за далёкой eligible-цели; `targetSelectionPolicy: "directional-eligible-friction-field"`, `excludedBypassMode: "friction-field"`, `excludedLandingAffectedSpinEligibility: false`, `continuationSuppressed: false`, `validGestureButNoResult: false`, `selectedResult` заполнен, `result_selection` есть, история получает одну запись.
 
 - [ ] Проверить medium/strong spin с excluded raw candidate и более далёкой active опцией.
-  Ожидаемый результат: движение к resolved eligible target встроено в deceleration; отдельного позднего `terminal_continuation_start` после остановки нет, `final_snap_start` остаётся локальным и не содержит движение больше 0.5 карточки.
+  Ожидаемый результат: движение через excluded-опции отображается как `excluded-bypass`/friction-field внутри deceleration; отдельного позднего `terminal_continuation_start` после остановки нет, `final_snap_start` остаётся локальным и не содержит движение больше 0.5 карточки.
 
 - [ ] Проверить финальное центрирование на weak / slow / medium / quick жестах.
   Ожидаемый результат: нет заметного обратного отката к карточке позади исходного направления; финальное центрирование локальное после terminal continuation; записать `feltJump: yes/no`, `feltSlip: yes/no`, `terminalContinuationDurationMs`, `terminalContinuationDistanceCards`, `finalSettleDurationMs`, `chosenTargetDirection`.

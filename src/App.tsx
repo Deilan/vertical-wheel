@@ -27,11 +27,12 @@ import {
   validateAskAllowedDecisions,
 } from './domain/optionExclusion'
 import {
-  calculateTerminalContinuationDurationMs,
+  calculateExcludedBypassMotion,
   calculateTerminalSettleDurationMs,
   calculateSpinOutcome,
   defaultSpinPhysicsConfig,
   evaluateTerminalContinuationEnergy,
+  getNoSpinReason,
   snapPositionToCard,
 } from './domain/spinPhysics'
 import { createShareHash, readShareConfigFromHash } from './domain/shareConfig'
@@ -851,6 +852,7 @@ function SpinScreen({
     inertialDurationMs,
     terminalContinuationDurationMs,
     finalCenteringDurationMs,
+    excludedBypassMode,
     result,
   }: {
     coastPositionPx: number
@@ -862,6 +864,7 @@ function SpinScreen({
     inertialDurationMs: number
     terminalContinuationDurationMs: number
     finalCenteringDurationMs: number
+    excludedBypassMode: 'none' | 'friction-field'
     result?: WheelOption
   }) {
     if (animationTimerRef.current !== undefined) {
@@ -890,6 +893,7 @@ function SpinScreen({
       inertialDurationMs,
       terminalContinuationDurationMs,
       finalCenteringDurationMs,
+      excludedBypassMode,
       hasResult: Boolean(result),
     })
     animationTimerRef.current = window.setTimeout(() => {
@@ -900,7 +904,7 @@ function SpinScreen({
         fromPositionPx: coastPositionPx,
         toPositionPx: decelerationEndPositionPx,
         durationMs: decelerationDurationMs,
-        phase: 'deceleration',
+        phase: excludedBypassMode === 'friction-field' ? 'excluded-bypass' : 'deceleration',
       })
       debugLogger.log('spin', 'deceleration_start', {
         coastPositionPx,
@@ -909,8 +913,9 @@ function SpinScreen({
         decelerationDurationMs,
         decelerationEndpointPolicy:
           decelerationEndPositionPx === finalPositionPx
-            ? 'resolved-eligible-target'
+            ? 'friction-field-resolved-eligible'
             : 'raw-physical-target',
+        excludedBypassMode,
         result: result ? getOptionSummary(result) : undefined,
       })
       animationTimerRef.current = window.setTimeout(() => {
@@ -930,7 +935,7 @@ function SpinScreen({
             fromPositionPx,
             toPositionPx: finalPositionPx,
             durationMs: finalCenteringDurationMs,
-            phase: 'final-snap',
+            phase: 'final-centering',
           })
           debugLogger.log('spin', 'final_snap_start', {
             fromPositionPx,
@@ -1046,6 +1051,11 @@ function SpinScreen({
     const releaseVelocityPxPerSec = -pointerVelocityPxPerSec
     const releasePositionPx = positionRef.current
     const dragDurationMs = Math.max(gesture.lastTimeMs - gesture.startTimeMs, 0)
+    const thresholdNoSpinReason = getNoSpinReason({
+      dragDistancePx,
+      releaseVelocityPxPerSec,
+    })
+    const gestureThresholdPassed = thresholdNoSpinReason === 'none'
     const pointerSamples = appendBoundedPointerSample(gesture.pointerSamples, {
       timestampMs: performance.now(),
       y: event.clientY,
@@ -1086,6 +1096,9 @@ function SpinScreen({
         dragDistancePx,
         releaseVelocityPxPerSec,
         reason: 'active-count-too-low',
+        gestureThresholdPassed,
+        noSpinReason: 'active-count-too-low',
+        excludedLandingAffectedSpinEligibility: false,
         resultUpdated: false,
         historyUpdated: false,
       })
@@ -1106,6 +1119,9 @@ function SpinScreen({
             visibleOptionCount: visibleOptions.length,
             activeOptionCount,
             excludedOptionCount,
+            gestureThresholdPassed,
+            noSpinReason: 'active-count-too-low',
+            excludedLandingAffectedSpinEligibility: false,
             excludedDisplayStateSummary,
             visibleOptionOrder,
             activeOptionIdsInVisibleOrder,
@@ -1192,19 +1208,26 @@ function SpinScreen({
       outcome.kind === 'spin' ? requestedTerminalContinuationDistancePx : 0
     const terminalContinuationDistanceCards =
       outcome.kind === 'spin' ? requestedTerminalContinuationDistanceCards : 0
-    const terminalContinuationDurationMs =
-      outcome.kind === 'spin' && terminalContinuationDistancePx !== 0
-        ? calculateTerminalContinuationDurationMs(terminalContinuationDistancePx, cardStepPx)
-        : 0
     const integratedExcludedSettling =
       outcome.kind === 'spin' && candidateWasExcluded && terminalContinuationDistancePx !== 0
+    const bypassMotion =
+      outcome.kind === 'spin'
+        ? calculateExcludedBypassMotion({
+            releaseVelocityPxPerSecAfterClamp: outcome.clampedReleaseVelocityPxPerSec,
+            baseDecelerationDurationMs: outcome.decelerationDurationMs,
+            rawDecelerationDistancePx: outcome.inertialPositionPx - outcome.coastPositionPx,
+            excludedBypassDistancePx: integratedExcludedSettling
+              ? terminalContinuationDistancePx
+              : 0,
+            cardStepPx,
+          })
+        : undefined
+    const terminalContinuationDurationMs = bypassMotion?.excludedBypassExtraDurationMs ?? 0
     const renderedDecelerationEndpointPx = integratedExcludedSettling
       ? finalPositionPx
       : inertialPositionPx
     const renderedDecelerationDurationMs =
-      outcome.kind === 'spin'
-        ? outcome.decelerationDurationMs + terminalContinuationDurationMs
-        : 0
+      bypassMotion?.renderedDecelerationDurationMs ?? 0
     const finalCenteringDistancePx =
       outcome.kind === 'spin'
         ? finalPositionPx - renderedDecelerationEndpointPx
@@ -1251,6 +1274,9 @@ function SpinScreen({
     const finalSettleDistanceCards = finalCenteringDistanceCards
     const eligibilityMovementWasLong = terminalContinuationDistanceCards > 1.5
     const terminalContinuationWasLong = requestedTerminalContinuationDistanceCards > 1.5
+    const telemetryTargetSelectionPolicy = integratedExcludedSettling
+      ? 'directional-eligible-friction-field'
+      : 'raw-active'
 
     if (debugLogger.isEnabled()) {
       if (outcome.kind === 'snap') {
@@ -1271,6 +1297,9 @@ function SpinScreen({
             visibleOptionCount: visibleOptions.length,
             activeOptionCount,
             excludedOptionCount,
+            gestureThresholdPassed,
+            noSpinReason: thresholdNoSpinReason,
+            excludedLandingAffectedSpinEligibility: false,
             excludedDisplayStateSummary,
             visibleOptionOrder,
             activeOptionIdsInVisibleOrder,
@@ -1309,6 +1338,9 @@ function SpinScreen({
           visibleOptionCount: visibleOptions.length,
           activeOptionCount,
           excludedOptionCount,
+          gestureThresholdPassed: true,
+          noSpinReason: 'none',
+          excludedLandingAffectedSpinEligibility: false,
           thresholds: {
             minDragDistancePx: defaultSpinPhysicsConfig.minDragDistancePx,
             minReleaseVelocityPxPerSec: defaultSpinPhysicsConfig.minReleaseVelocityPxPerSec,
@@ -1362,7 +1394,7 @@ function SpinScreen({
             ),
             candidateWasExcluded,
             adjustedDueToExclusion: candidateWasExcluded,
-            targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'raw-active',
+            targetSelectionPolicy: telemetryTargetSelectionPolicy,
             localEligibleTargetSelectionApplied:
               terminalTarget?.localEligibleTargetSelectionApplied ?? false,
             rawTerminalLandingPositionPx: outcome.finalPositionPx,
@@ -1428,9 +1460,31 @@ function SpinScreen({
             rawExcludedWasNotVisualStop: integratedExcludedSettling,
             integratedExcludedSettling,
             decelerationEndpointPolicy: integratedExcludedSettling
-              ? 'resolved-eligible-target'
+              ? 'friction-field-resolved-eligible'
               : 'raw-physical-target',
             terminalContinuationIntegratedIntoDeceleration: integratedExcludedSettling,
+            physicsModelVersion: bypassMotion?.physicsModelVersion,
+            excludedBypassMode: bypassMotion?.excludedBypassMode,
+            excludedBypassStartedBeforeStop: bypassMotion?.excludedBypassStartedBeforeStop,
+            excludedBypassStartPositionPx: terminalTarget?.candidatePositionPx,
+            excludedBypassStartVelocityPxPerSec: bypassMotion?.excludedBypassStartVelocityPxPerSec,
+            excludedBypassDistancePx: bypassMotion?.excludedBypassDistancePx,
+            excludedBypassDistanceCards: bypassMotion?.excludedBypassDistanceCards,
+            excludedBypassFrictionMultiplier: bypassMotion?.excludedBypassFrictionMultiplier,
+            excludedBypassExtraDurationMs: bypassMotion?.excludedBypassExtraDurationMs,
+            velocityAtReleasePxPerSec: bypassMotion?.velocityAtReleasePxPerSec,
+            velocityAtCoastEndPxPerSec: bypassMotion?.velocityAtCoastEndPxPerSec,
+            velocityAtBypassStartPxPerSec: bypassMotion?.velocityAtBypassStartPxPerSec,
+            velocityAtBypassEndPxPerSec: bypassMotion?.velocityAtBypassEndPxPerSec,
+            velocityAtFinalCenteringStartPxPerSec:
+              bypassMotion?.velocityAtFinalCenteringStartPxPerSec,
+            maxObservedVelocityIncreasePxPerSec:
+              bypassMotion?.maxObservedVelocityIncreasePxPerSec,
+            velocityMonotonicNonIncreasing: bypassMotion?.velocityMonotonicNonIncreasing,
+            accelerationSpikeDetected: bypassMotion?.accelerationSpikeDetected,
+            phaseTransitionVelocityContinuity:
+              bypassMotion?.phaseTransitionVelocityContinuity,
+            apparentMotorPushDetected: bypassMotion?.apparentMotorPushDetected,
             eligibilityMovementWasLong,
             eligibilityAdjustmentApplied: eligibilityExtensionPx !== 0,
             eligibilityAdjustmentReason,
@@ -1462,6 +1516,9 @@ function SpinScreen({
       outcome,
       dragDistancePx,
       releaseVelocityPxPerSec,
+      gestureThresholdPassed: outcome.kind === 'spin',
+      noSpinReason: outcome.kind === 'spin' ? 'none' : thresholdNoSpinReason,
+      excludedLandingAffectedSpinEligibility: false,
       projectedTravelPx: outcome.kind === 'spin' ? outcome.projectedTravelPx : undefined,
       decelerationDurationMs: outcome.kind === 'spin' ? outcome.inertialDurationMs : undefined,
       finalSnapDistancePx,
@@ -1493,7 +1550,7 @@ function SpinScreen({
                   positionPx: resolvedEligiblePositionPx,
                 },
               ),
-              targetSelectionPolicy: terminalTarget?.targetSelectionPolicy ?? 'raw-active',
+              targetSelectionPolicy: telemetryTargetSelectionPolicy,
               directionPreserved: terminalTarget?.directionPreserved ?? true,
               terminalContinuationDistancePx,
               terminalContinuationDistanceCards,
@@ -1506,9 +1563,18 @@ function SpinScreen({
               rawExcludedWasNotVisualStop: integratedExcludedSettling,
               integratedExcludedSettling,
               decelerationEndpointPolicy: integratedExcludedSettling
-                ? 'resolved-eligible-target'
+                ? 'friction-field-resolved-eligible'
                 : 'raw-physical-target',
               terminalContinuationIntegratedIntoDeceleration: integratedExcludedSettling,
+              physicsModelVersion: bypassMotion?.physicsModelVersion,
+              excludedBypassMode: bypassMotion?.excludedBypassMode,
+              excludedBypassStartedBeforeStop: bypassMotion?.excludedBypassStartedBeforeStop,
+              excludedBypassStartVelocityPxPerSec:
+                bypassMotion?.excludedBypassStartVelocityPxPerSec,
+              excludedBypassFrictionMultiplier: bypassMotion?.excludedBypassFrictionMultiplier,
+              velocityMonotonicNonIncreasing: bypassMotion?.velocityMonotonicNonIncreasing,
+              accelerationSpikeDetected: bypassMotion?.accelerationSpikeDetected,
+              apparentMotorPushDetected: bypassMotion?.apparentMotorPushDetected,
             }
           : undefined,
     })
@@ -1531,6 +1597,7 @@ function SpinScreen({
         inertialDurationMs: outcome.inertialDurationMs,
         terminalContinuationDurationMs,
         finalCenteringDurationMs,
+        excludedBypassMode: bypassMotion?.excludedBypassMode ?? 'none',
         result,
       })
       return

@@ -53,6 +53,9 @@ describe('spin telemetry helpers', () => {
       visibleOptionCount: 3,
       activeOptionCount: 3,
       excludedOptionCount: 0,
+      gestureThresholdPassed: false,
+      noSpinReason: 'both-thresholds-below',
+      excludedLandingAffectedSpinEligibility: false,
       thresholds: {
         minDragDistancePx: 40,
         minReleaseVelocityPxPerSec: 350,
@@ -95,6 +98,9 @@ describe('spin telemetry helpers', () => {
       visibleOptionCount: 3,
       activeOptionCount: 2,
       excludedOptionCount: 1,
+      gestureThresholdPassed: true,
+      noSpinReason: 'none',
+      excludedLandingAffectedSpinEligibility: false,
       excludedDisplayStateSummary: {
         hidden: 0,
         showDisabled: 1,
@@ -154,7 +160,7 @@ describe('spin telemetry helpers', () => {
           positionPx: 500,
         },
         rawLandingCandidateExcluded: true,
-        targetSelectionPolicy: 'directional-eligible',
+        targetSelectionPolicy: 'directional-eligible-friction-field',
         localEligibleTargetSelectionApplied: true,
         rawInertialPositionPx: 580,
         rawRoundedTerminalPositionPx: 500,
@@ -208,8 +214,31 @@ describe('spin telemetry helpers', () => {
         finalCenteringDurationMs: 0,
         rawExcludedWasNotVisualStop: true,
         integratedExcludedSettling: true,
-        decelerationEndpointPolicy: 'resolved-eligible-target',
+        decelerationEndpointPolicy: 'friction-field-resolved-eligible',
         terminalContinuationIntegratedIntoDeceleration: true,
+        physicsModelVersion: 'E3G-friction-field',
+        excludedBypassMode: 'friction-field',
+        excludedBypassStartedBeforeStop: true,
+        excludedBypassStartPositionPx: 500,
+        excludedBypassStartVelocityPxPerSec: 320,
+        excludedBypassDistancePx: 100,
+        excludedBypassDistanceCards: 1,
+        excludedBypassFrictionMultiplier: 0.5,
+        excludedBypassExtraDurationMs: 420,
+        velocityAtReleasePxPerSec: 1400,
+        velocityAtCoastEndPxPerSec: 1400,
+        velocityAtBypassStartPxPerSec: 320,
+        velocityAtBypassEndPxPerSec: 112,
+        velocityAtFinalCenteringStartPxPerSec: 0,
+        maxObservedVelocityIncreasePxPerSec: 0,
+        velocityMonotonicNonIncreasing: true,
+        accelerationSpikeDetected: false,
+        phaseTransitionVelocityContinuity: {
+          coastToDecelerationDeltaPxPerSec: 0,
+          decelerationToBypassDeltaPxPerSec: 1080,
+          bypassToFinalCenteringDeltaPxPerSec: 112,
+        },
+        apparentMotorPushDetected: false,
         eligibilityMovementWasLong: false,
         adjustedEligibleOption: {
           id: 'a',
@@ -253,13 +282,17 @@ describe('spin telemetry helpers', () => {
     })
 
     expect(report.valid?.eligibilityAdjustmentReason).toBe('candidate-excluded')
-    expect(report.valid?.targetSelectionPolicy).toBe('directional-eligible')
+    expect(report.valid?.targetSelectionPolicy).toBe('directional-eligible-friction-field')
     expect(report.valid?.directionPreserved).toBe(true)
     expect(report.valid?.reverseDirectionCandidateIgnored).toBe(true)
     expect(report.valid?.terminalContinuationDistanceCards).toBe(1)
     expect(report.valid?.continuationBudgetCards).toBe(3)
     expect(report.valid?.continuationAllowed).toBe(true)
     expect(report.valid?.continuationSuppressed).toBe(false)
+    expect(report.valid?.physicsModelVersion).toBe('E3G-friction-field')
+    expect(report.valid?.excludedBypassMode).toBe('friction-field')
+    expect(report.valid?.velocityMonotonicNonIncreasing).toBe(true)
+    expect(report.valid?.accelerationSpikeDetected).toBe(false)
     expect(report.valid?.resolvedEligibleTarget?.id).toBe('a')
     expect(report.valid?.finalSettleAnimated).toBe(true)
     expect(report.valid?.finalSnapWasLarge).toBe(false)
@@ -283,6 +316,9 @@ describe('spin telemetry helpers', () => {
       visibleOptionCount: 6,
       activeOptionCount: 2,
       excludedOptionCount: 4,
+      gestureThresholdPassed: true,
+      noSpinReason: 'none',
+      excludedLandingAffectedSpinEligibility: false,
       thresholds: {
         minDragDistancePx: 40,
         minReleaseVelocityPxPerSec: 350,
@@ -309,7 +345,7 @@ describe('spin telemetry helpers', () => {
         rawLandingCandidateExcluded: true,
         candidateWasExcluded: true,
         adjustedDueToExclusion: true,
-        targetSelectionPolicy: 'directional-eligible',
+        targetSelectionPolicy: 'directional-eligible-friction-field',
         rawTerminalLandingWasExcluded: true,
         terminalContinuationDistancePx: -600,
         terminalContinuationDistanceCards: 6,
@@ -325,8 +361,31 @@ describe('spin telemetry helpers', () => {
         finalCenteringDurationMs: 0,
         rawExcludedWasNotVisualStop: true,
         integratedExcludedSettling: true,
-        decelerationEndpointPolicy: 'resolved-eligible-target',
+        decelerationEndpointPolicy: 'friction-field-resolved-eligible',
         terminalContinuationIntegratedIntoDeceleration: true,
+        physicsModelVersion: 'E3G-friction-field',
+        excludedBypassMode: 'friction-field',
+        excludedBypassStartedBeforeStop: true,
+        excludedBypassStartPositionPx: -300,
+        excludedBypassStartVelocityPxPerSec: 180,
+        excludedBypassDistancePx: -600,
+        excludedBypassDistanceCards: 6,
+        excludedBypassFrictionMultiplier: 0.25,
+        excludedBypassExtraDurationMs: 2200,
+        velocityAtReleasePxPerSec: 700,
+        velocityAtCoastEndPxPerSec: 700,
+        velocityAtBypassStartPxPerSec: 180,
+        velocityAtBypassEndPxPerSec: 63,
+        velocityAtFinalCenteringStartPxPerSec: 0,
+        maxObservedVelocityIncreasePxPerSec: 0,
+        velocityMonotonicNonIncreasing: true,
+        accelerationSpikeDetected: false,
+        phaseTransitionVelocityContinuity: {
+          coastToDecelerationDeltaPxPerSec: 0,
+          decelerationToBypassDeltaPxPerSec: 520,
+          bypassToFinalCenteringDeltaPxPerSec: 63,
+        },
+        apparentMotorPushDetected: false,
         resolvedEligibleTarget: {
           id: 'a',
           title: 'Активная',
@@ -351,12 +410,16 @@ describe('spin telemetry helpers', () => {
       },
     })
 
-    expect(report.valid?.targetSelectionPolicy).toBe('directional-eligible')
+    expect(report.valid?.targetSelectionPolicy).toBe('directional-eligible-friction-field')
     expect(report.valid?.validGestureButNoResult).toBe(false)
     expect(report.valid?.continuationSuppressed).toBe(false)
     expect(report.valid?.selectedResult?.id).toBe('a')
     expect(report.valid?.rawExcludedWasNotVisualStop).toBe(true)
     expect(report.valid?.integratedExcludedSettling).toBe(true)
+    expect(report.valid?.excludedBypassStartedBeforeStop).toBe(true)
+    expect(report.valid?.velocityMonotonicNonIncreasing).toBe(true)
+    expect(report.valid?.accelerationSpikeDetected).toBe(false)
+    expect(report.valid?.apparentMotorPushDetected).toBe(false)
     expect(report.valid?.finalSnapWasLarge).toBe(false)
   })
 })

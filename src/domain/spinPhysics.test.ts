@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  calculateExcludedBypassMotion,
   calculateContinuationBudgetCards,
   calculateSpinOutcome,
   calculateTerminalContinuationDurationMs,
   calculateTerminalSettleDurationMs,
   defaultSpinPhysicsConfig,
   evaluateTerminalContinuationEnergy,
+  getNoSpinReason,
   isValidSpinGesture,
   projectInertialTravelPx,
   snapPositionToCard,
@@ -16,6 +18,19 @@ describe('spin physics', () => {
     expect(isValidSpinGesture(39, 800)).toBe(false)
     expect(isValidSpinGesture(80, 349)).toBe(false)
     expect(isValidSpinGesture(80, -350)).toBe(true)
+  })
+
+  it('reports explicit no-spin reasons for threshold failures', () => {
+    expect(getNoSpinReason({ dragDistancePx: 39, releaseVelocityPxPerSec: 800 })).toBe(
+      'drag-distance-below-threshold',
+    )
+    expect(getNoSpinReason({ dragDistancePx: 80, releaseVelocityPxPerSec: 349 })).toBe(
+      'release-velocity-below-threshold',
+    )
+    expect(getNoSpinReason({ dragDistancePx: 10, releaseVelocityPxPerSec: 100 })).toBe(
+      'both-thresholds-below',
+    )
+    expect(getNoSpinReason({ dragDistancePx: 40, releaseVelocityPxPerSec: 350 })).toBe('none')
   })
 
   it('accepts exact threshold values as a valid spin gesture', () => {
@@ -203,6 +218,34 @@ describe('spin physics', () => {
     expect(energy.continuationAllowed).toBe(true)
     expect(energy.continuationSuppressed).toBe(false)
     expect(energy.validGestureButNoResult).toBe(false)
+  })
+
+  it('models excluded bypass as reduced-friction motion without suppressing valid spins', () => {
+    const motion = calculateExcludedBypassMotion({
+      releaseVelocityPxPerSecAfterClamp: 700,
+      baseDecelerationDurationMs: 900,
+      rawDecelerationDistancePx: -300,
+      excludedBypassDistancePx: -900,
+      cardStepPx: 100,
+    })
+
+    expect(motion.physicsModelVersion).toBe('E3G-friction-field')
+    expect(motion.excludedBypassMode).toBe('friction-field')
+    expect(motion.excludedBypassStartedBeforeStop).toBe(true)
+    expect(motion.excludedBypassDistanceCards).toBe(9)
+    expect(motion.excludedBypassExtraDurationMs).toBeGreaterThan(0)
+    expect(motion.renderedDecelerationDurationMs).toBeGreaterThan(900)
+    expect(motion.velocityMonotonicNonIncreasing).toBe(true)
+    expect(motion.accelerationSpikeDetected).toBe(false)
+    expect(motion.apparentMotorPushDetected).toBe(false)
+    expect(motion.maxObservedVelocityIncreasePxPerSec).toBe(0)
+    expect(motion.velocityAtBypassStartPxPerSec).toBeGreaterThan(0)
+    expect(motion.velocityAtBypassStartPxPerSec).toBeLessThanOrEqual(
+      motion.velocityAtCoastEndPxPerSec,
+    )
+    expect(motion.velocityAtBypassEndPxPerSec).toBeLessThanOrEqual(
+      motion.velocityAtBypassStartPxPerSec,
+    )
   })
 
   it('allows nearby continuation for weak-feeling valid spins', () => {

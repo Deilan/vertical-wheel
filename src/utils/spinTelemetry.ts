@@ -2,6 +2,8 @@ export type SpinTelemetryPhase =
   | 'drag'
   | 'coast'
   | 'deceleration'
+  | 'excluded-bypass'
+  | 'final-centering'
   | 'final-snap'
   | 'complete'
 
@@ -57,6 +59,14 @@ export type SpinTelemetryReport = {
   visibleOptionCount: number
   activeOptionCount: number
   excludedOptionCount: number
+  gestureThresholdPassed?: boolean
+  noSpinReason?:
+    | 'drag-distance-below-threshold'
+    | 'release-velocity-below-threshold'
+    | 'both-thresholds-below'
+    | 'active-count-too-low'
+    | 'none'
+  excludedLandingAffectedSpinEligibility?: false
   excludedDisplayStateSummary?: {
     hidden: number
     showDisabled: number
@@ -108,7 +118,7 @@ export type SpinTelemetryReport = {
     adjustedDueToExclusion: boolean
     targetSelectionPolicy?:
       | 'raw-active'
-      | 'directional-eligible'
+      | 'directional-eligible-friction-field'
       | 'weak-snap'
       | 'locked'
     localEligibleTargetSelectionApplied?: boolean
@@ -142,8 +152,31 @@ export type SpinTelemetryReport = {
     finalCenteringDurationMs?: number
     rawExcludedWasNotVisualStop?: boolean
     integratedExcludedSettling?: boolean
-    decelerationEndpointPolicy?: 'raw-physical-target' | 'resolved-eligible-target'
+    decelerationEndpointPolicy?: 'raw-physical-target' | 'friction-field-resolved-eligible'
     terminalContinuationIntegratedIntoDeceleration?: boolean
+    physicsModelVersion?: 'E3G-friction-field'
+    excludedBypassMode?: 'none' | 'friction-field'
+    excludedBypassStartedBeforeStop?: boolean
+    excludedBypassStartPositionPx?: number
+    excludedBypassStartVelocityPxPerSec?: number
+    excludedBypassDistancePx?: number
+    excludedBypassDistanceCards?: number
+    excludedBypassFrictionMultiplier?: number
+    excludedBypassExtraDurationMs?: number
+    velocityAtReleasePxPerSec?: number
+    velocityAtCoastEndPxPerSec?: number
+    velocityAtBypassStartPxPerSec?: number
+    velocityAtBypassEndPxPerSec?: number
+    velocityAtFinalCenteringStartPxPerSec?: number
+    maxObservedVelocityIncreasePxPerSec?: number
+    velocityMonotonicNonIncreasing?: boolean
+    accelerationSpikeDetected?: boolean
+    phaseTransitionVelocityContinuity?: {
+      coastToDecelerationDeltaPxPerSec: number
+      decelerationToBypassDeltaPxPerSec: number
+      bypassToFinalCenteringDeltaPxPerSec: number
+    }
+    apparentMotorPushDetected?: boolean
     eligibilityMovementWasLong?: boolean
     eligibilityAdjustmentApplied?: boolean
     eligibilityAdjustmentReason?:

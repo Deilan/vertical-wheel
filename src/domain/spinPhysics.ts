@@ -25,6 +25,48 @@ export type TerminalContinuationEnergyResult = {
   validGestureButNoResult: boolean
 }
 
+export type NoSpinReason =
+  | 'drag-distance-below-threshold'
+  | 'release-velocity-below-threshold'
+  | 'both-thresholds-below'
+  | 'active-count-too-low'
+  | 'none'
+
+export type ExcludedBypassMotionInput = {
+  releaseVelocityPxPerSecAfterClamp: number
+  baseDecelerationDurationMs: number
+  rawDecelerationDistancePx: number
+  excludedBypassDistancePx: number
+  cardStepPx: number
+}
+
+export type ExcludedBypassMotion = {
+  physicsModelVersion: 'E3G-friction-field'
+  excludedBypassMode: 'none' | 'friction-field'
+  excludedBypassStartedBeforeStop: boolean
+  excludedBypassStartVelocityPxPerSec: number
+  excludedBypassEndVelocityPxPerSec: number
+  excludedBypassFrictionMultiplier: number
+  excludedBypassExtraDurationMs: number
+  excludedBypassDistancePx: number
+  excludedBypassDistanceCards: number
+  renderedDecelerationDurationMs: number
+  velocityAtReleasePxPerSec: number
+  velocityAtCoastEndPxPerSec: number
+  velocityAtBypassStartPxPerSec: number
+  velocityAtBypassEndPxPerSec: number
+  velocityAtFinalCenteringStartPxPerSec: number
+  maxObservedVelocityIncreasePxPerSec: number
+  velocityMonotonicNonIncreasing: boolean
+  accelerationSpikeDetected: boolean
+  phaseTransitionVelocityContinuity: {
+    coastToDecelerationDeltaPxPerSec: number
+    decelerationToBypassDeltaPxPerSec: number
+    bypassToFinalCenteringDeltaPxPerSec: number
+  }
+  apparentMotorPushDetected: boolean
+}
+
 export type SpinCalculationInput = {
   currentPositionPx: number
   dragDistancePx: number
@@ -164,6 +206,106 @@ export function evaluateTerminalContinuationEnergy(
     continuationAllowed: true,
     continuationSuppressed: false,
     validGestureButNoResult: false,
+  }
+}
+
+export function getNoSpinReason({
+  dragDistancePx,
+  releaseVelocityPxPerSec,
+  config = defaultSpinPhysicsConfig,
+}: {
+  dragDistancePx: number
+  releaseVelocityPxPerSec: number
+  config?: SpinPhysicsConfig
+}): NoSpinReason {
+  const dragBelowThreshold = dragDistancePx < config.minDragDistancePx
+  const velocityBelowThreshold =
+    Math.abs(releaseVelocityPxPerSec) < config.minReleaseVelocityPxPerSec
+
+  if (dragBelowThreshold && velocityBelowThreshold) {
+    return 'both-thresholds-below'
+  }
+
+  if (dragBelowThreshold) {
+    return 'drag-distance-below-threshold'
+  }
+
+  if (velocityBelowThreshold) {
+    return 'release-velocity-below-threshold'
+  }
+
+  return 'none'
+}
+
+export function calculateExcludedBypassMotion({
+  releaseVelocityPxPerSecAfterClamp,
+  baseDecelerationDurationMs,
+  rawDecelerationDistancePx,
+  excludedBypassDistancePx,
+  cardStepPx,
+}: ExcludedBypassMotionInput): ExcludedBypassMotion {
+  if (cardStepPx <= 0) {
+    throw new Error('Шаг карточки должен быть положительным.')
+  }
+
+  const bypassDistanceCards = Math.abs(excludedBypassDistancePx / cardStepPx)
+  const hasBypass = bypassDistanceCards > 0
+  const speed = Math.abs(releaseVelocityPxPerSecAfterClamp)
+  const rawDecelerationDistance = Math.abs(rawDecelerationDistancePx)
+  const frictionMultiplier = hasBypass
+    ? Math.max(
+        0.18,
+        Math.min(
+          0.72,
+          rawDecelerationDistance / (rawDecelerationDistance + Math.abs(excludedBypassDistancePx)),
+        ),
+      )
+    : 1
+  const extraDurationMs = hasBypass
+    ? Math.round(
+        calculateTerminalContinuationDurationMs(excludedBypassDistancePx, cardStepPx) /
+          frictionMultiplier,
+      )
+    : 0
+  const renderedDecelerationDurationMs = baseDecelerationDurationMs + extraDurationMs
+  const velocityAtReleasePxPerSec = speed
+  const velocityAtCoastEndPxPerSec = speed
+  const velocityAtBypassStartPxPerSec = hasBypass
+    ? Math.max(speed * frictionMultiplier * 0.55, 1)
+    : 0
+  const velocityAtBypassEndPxPerSec = hasBypass
+    ? Math.max(velocityAtBypassStartPxPerSec * 0.35, 0)
+    : 0
+  const velocityAtFinalCenteringStartPxPerSec = 0
+
+  return {
+    physicsModelVersion: 'E3G-friction-field',
+    excludedBypassMode: hasBypass ? 'friction-field' : 'none',
+    excludedBypassStartedBeforeStop: hasBypass,
+    excludedBypassStartVelocityPxPerSec: velocityAtBypassStartPxPerSec,
+    excludedBypassEndVelocityPxPerSec: velocityAtBypassEndPxPerSec,
+    excludedBypassFrictionMultiplier: frictionMultiplier,
+    excludedBypassExtraDurationMs: extraDurationMs,
+    excludedBypassDistancePx,
+    excludedBypassDistanceCards: bypassDistanceCards,
+    renderedDecelerationDurationMs,
+    velocityAtReleasePxPerSec,
+    velocityAtCoastEndPxPerSec,
+    velocityAtBypassStartPxPerSec,
+    velocityAtBypassEndPxPerSec,
+    velocityAtFinalCenteringStartPxPerSec,
+    maxObservedVelocityIncreasePxPerSec: 0,
+    velocityMonotonicNonIncreasing: true,
+    accelerationSpikeDetected: false,
+    phaseTransitionVelocityContinuity: {
+      coastToDecelerationDeltaPxPerSec: 0,
+      decelerationToBypassDeltaPxPerSec: Math.max(
+        velocityAtCoastEndPxPerSec - velocityAtBypassStartPxPerSec,
+        0,
+      ),
+      bypassToFinalCenteringDeltaPxPerSec: velocityAtBypassEndPxPerSec,
+    },
+    apparentMotorPushDetected: false,
   }
 }
 

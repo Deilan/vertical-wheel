@@ -51,7 +51,7 @@
 | Exclusion | Ask блокирует следующий spin до решения |  |  |  |
 | Exclusion | Hidden excluded опции исчезают из барабана |  |  |  |
 | Exclusion | Visible-disabled excluded опции не становятся результатом |  |  |  |
-| Exclusion | Settling после excluded candidate ощущается естественно |  | `feltSlip: yes/no; feltJump: yes/no; feltNatural: 1-5; chosenTargetDirection:; directionPreserved:; continuationSuppressed:false; rawExcludedWasNotVisualStop:; integratedExcludedSettling:; decelerationEndpointPolicy:; reverseDirectionCandidateIgnored:; terminalContinuationDistanceCards:; terminalContinuationDurationMs:; finalCenteringDistanceCards:; finalSettleDurationMs:; comment:` |  |
+| Exclusion | Settling после excluded candidate ощущается естественно |  | `feltSlip: yes/no; feltJump: yes/no; feltNatural: 1-5; physicsModelVersion:E3G-friction-field; excludedBypassMode:; chosenTargetDirection:; directionPreserved:; velocityMonotonicNonIncreasing:; accelerationSpikeDetected:; apparentMotorPushDetected:; rawExcludedWasNotVisualStop:; decelerationEndpointPolicy:; finalCenteringDistanceCards:; comment:` |  |
 | Exclusion | Restore one / restore all |  |  |  |
 | Exclusion | Active count меньше 2 блокирует spin |  |  |  |
 | Exclusion | Share link сбрасывает текущее excluded state |  |  |  |
